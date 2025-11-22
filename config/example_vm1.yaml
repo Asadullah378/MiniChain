@@ -1,0 +1,31 @@
+# Example configuration for VM 1 (svm-11.cs.helsinki.fi)
+# Copy this to config.yaml or use command-line arguments
+
+node:
+  id: "svm-11"
+  hostname: "svm-11.cs.helsinki.fi"
+  port: 8000
+  data_dir: "data"
+
+network:
+  peers:
+    - hostname: "svm-11-2.cs.helsinki.fi"
+      port: 8000
+    - hostname: "svm-11-3.cs.helsinki.fi"
+      port: 8000
+
+consensus:
+  type: "poa_round_robin"
+  block_interval: 5
+  proposal_timeout: 10
+  quorum_size: 2
+
+blockchain:
+  genesis_block: true
+  max_block_size: 100
+
+logging:
+  level: "INFO"
+  file: "minichain.log"
+  console: true
+

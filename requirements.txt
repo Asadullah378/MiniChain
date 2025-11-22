@@ -1,0 +1,8 @@
+# Core dependencies
+cryptography>=41.0.0  # For Ed25519 signatures
+msgpack>=1.0.7  # For message serialization
+pyyaml>=6.0  # For configuration files
+
+# Optional but recommended
+colorlog>=6.8.0  # For colored logging
+
