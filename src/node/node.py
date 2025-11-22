@@ -15,18 +15,21 @@ from src.p2p.network import NetworkManager
 class Node:
     """Main node that coordinates blockchain, consensus, and networking."""
     
-    def __init__(self, config: Config, disable_console_logging: bool = False):
+    def __init__(self, config: Config, disable_console_logging: bool = False, log_level: Optional[str] = None):
         """
         Initialize node with configuration.
         
         Args:
             config: Node configuration
             disable_console_logging: If True, disable console output for loggers
+            log_level: Override log level (if None, uses config value)
         """
         self.config = config
+        # Use provided log_level or fall back to config
+        level = log_level or config.get('logging.level', 'INFO')
         self.logger = setup_logger(
             'minichain.node',
-            level=config.get('logging.level', 'INFO'),
+            level=level,
             log_file=config.get('logging.file'),
             console=config.get('logging.console', True) and not disable_console_logging
         )
@@ -228,15 +231,29 @@ class Node:
             
             # Validate block
             if not self._validate_proposal(block):
-                self.logger.warning(f"Invalid proposal at height {height}")
-                # Log more details for debugging
+                # Get validation details for logging
                 expected_height = self.blockchain.get_height() + 1
                 expected_prev_hash = self.blockchain.get_latest_hash()
                 expected_leader = self.consensus.get_current_leader(height)
+                computed_hash = block.compute_hash()
+                
+                # Log warning with key details
+                self.logger.warning(
+                    f"Invalid proposal at height {height}: "
+                    f"expected_height={expected_height}, got={height}; "
+                    f"expected_leader={expected_leader}, got={proposer_id}; "
+                    f"prev_hash_match={block.prev_hash == expected_prev_hash}; "
+                    f"hash_match={block.block_hash == computed_hash}"
+                )
+                
+                # Log detailed debug information
                 self.logger.debug(f"  Expected height: {expected_height}, got: {height}")
-                self.logger.debug(f"  Expected prev_hash: {expected_prev_hash.hex()[:16]}..., got: {prev_hash.hex()[:16]}...")
+                self.logger.debug(f"  Expected prev_hash: {expected_prev_hash.hex()[:32]}..., got: {prev_hash.hex()[:32]}...")
                 self.logger.debug(f"  Expected leader: {expected_leader}, got: {proposer_id}")
-                self.logger.debug(f"  Block hash matches: {block.block_hash == block_hash}")
+                self.logger.debug(f"  Computed hash: {computed_hash.hex()[:32]}...")
+                self.logger.debug(f"  Block hash: {block.block_hash.hex()[:32]}...")
+                self.logger.debug(f"  Block hash matches computed: {block.block_hash == computed_hash}")
+                self.logger.debug(f"  Block is_valid(): {block.is_valid()}")
                 return
             
             # Store pending proposal

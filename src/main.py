@@ -92,7 +92,7 @@ def main():
     
     # Create and start node
     try:
-        node = Node(config, disable_console_logging=cli_enabled)
+        node = Node(config, disable_console_logging=cli_enabled, log_level=log_level)
         
         # Start CLI in interactive mode (unless disabled)
         cli = None
