@@ -112,7 +112,8 @@ class Blockchain:
             return False
         
         # Check previous hash
-        if block.prev_hash != self.get_latest_hash():
+        latest_hash = self.get_latest_hash()
+        if block.prev_hash != latest_hash:
             return False
         
         return True

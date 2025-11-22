@@ -358,6 +358,21 @@ class Node:
             
             # Check if we have quorum (only leader checks)
             if self.consensus.has_quorum(height):
+                # Check if we've already committed this block (prevent duplicate commits)
+                current_height = self.blockchain.get_height()
+                if current_height >= height:
+                    # Block already committed, ignore this ACK
+                    self.logger.debug(f"Block {height} already committed (current height: {current_height}), ignoring ACK")
+                    return
+                
+                # Check if we're already committing this block (prevent concurrent commits)
+                if self.consensus.is_committing(height):
+                    self.logger.debug(f"Block {height} is already being committed, ignoring duplicate ACK")
+                    return
+                
+                # Set committing flag to prevent concurrent commit attempts
+                self.consensus.set_committing(height, True)
+                
                 self.logger.info(f"Quorum reached for height {height}, committing block")
                 if self.consensus.pending_proposal:
                     # Save block hash before on_block_committed clears pending_proposal
@@ -381,8 +396,20 @@ class Node:
                         )
                         self.logger.info(f"Block {height} committed")
                     else:
-                        self.logger.error(f"Failed to add block {height} to chain")
+                        # Block validation failed - clear committing flag to allow retry
+                        self.consensus.set_committing(height, False)
+                        # Log details for debugging
+                        current_height = self.blockchain.get_height()
+                        expected_height = current_height + 1
+                        latest_hash = self.blockchain.get_latest_hash()
+                        self.logger.error(
+                            f"Failed to add block {height} to chain: "
+                            f"current_height={current_height}, expected_height={expected_height}, "
+                            f"block_height={block.height}, prev_hash_match={block.prev_hash == latest_hash}"
+                        )
                 else:
+                    # No pending proposal - clear committing flag
+                    self.consensus.set_committing(height, False)
                     self.logger.warning(f"Quorum reached for height {height} but no pending proposal")
         
         except Exception as e:

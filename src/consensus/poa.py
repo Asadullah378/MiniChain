@@ -35,6 +35,7 @@ class RoundRobinPoA:
         self.pending_proposal: Optional[Block] = None
         self.acks_received: Dict[int, Set[str]] = {}  # height -> set of voter IDs
         self.last_block_time = time.time()
+        self.committing: Dict[int, bool] = {}  # height -> is_committing flag to prevent duplicate commits
     
     def get_current_leader(self, height: int) -> str:
         """
@@ -133,6 +134,17 @@ class RoundRobinPoA:
         self.last_block_time = time.time()
         self.pending_proposal = None
         self.clear_acks(height)
+        # Clear committing flag
+        if height in self.committing:
+            del self.committing[height]
+    
+    def is_committing(self, height: int) -> bool:
+        """Check if a block at this height is currently being committed."""
+        return self.committing.get(height, False)
+    
+    def set_committing(self, height: int, value: bool = True):
+        """Set the committing flag for a height."""
+        self.committing[height] = value
     
     def get_next_leader(self, current_height: int) -> str:
         """Get the next leader after current height."""
