@@ -5,7 +5,8 @@ import argparse
 from pathlib import Path
 
 # Add src to path
-sys.path.insert(0, str(Path(__file__).parent))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from src.common.config import Config
 from src.common.logger import setup_logger
