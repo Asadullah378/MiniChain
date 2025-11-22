@@ -11,6 +11,7 @@ sys.path.insert(0, str(project_root))
 from src.common.config import Config
 from src.common.logger import setup_logger
 from src.node.node import Node
+from src.cli.cli import CLI
 
 
 def main():
@@ -35,6 +36,11 @@ def main():
         '--node-id',
         type=str,
         help='Node ID (overrides config)'
+    )
+    parser.add_argument(
+        '--no-cli',
+        action='store_true',
+        help='Disable interactive CLI (run in background mode)'
     )
     
     args = parser.parse_args()
@@ -75,10 +81,25 @@ def main():
     # Create and start node
     try:
         node = Node(config)
+        
+        # Start CLI in interactive mode (unless disabled)
+        cli = None
+        if not args.no_cli:
+            cli = CLI(node)
+            cli.start()
+        
+        # Start node (this will block until interrupted)
         node.start()
+        
+        # Stop CLI when node stops
+        if cli:
+            cli.stop()
     except KeyboardInterrupt:
         logger.info("Shutting down node...")
-        node.stop()
+        if 'node' in locals():
+            node.stop()
+        if 'cli' in locals():
+            cli.stop()
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
         sys.exit(1)

@@ -113,6 +113,24 @@ The node automatically:
 - Uses hostname as node ID if not specified
 - Can discover peers from configuration or environment
 
+## CLI Interface
+
+MiniChain includes an interactive CLI for submitting transactions and monitoring the blockchain. When you start a node, the CLI automatically launches.
+
+**Quick Example:**
+```bash
+# Start node
+python src/main.py --node-id svm-11 --port 8000 --peers "..."
+
+# In the CLI prompt:
+minichain> submit alice bob 10.5
+minichain> status
+minichain> chain
+minichain> mempool
+```
+
+See [CLI_GUIDE.md](CLI_GUIDE.md) for complete CLI documentation.
+
 ## Features
 
 ### Consensus

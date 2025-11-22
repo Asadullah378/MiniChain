@@ -64,6 +64,23 @@ class Node:
         self.running = False
         self.consensus_thread: Optional[threading.Thread] = None
     
+    def submit_transaction(self, tx: Transaction) -> bool:
+        """
+        Submit a transaction to the mempool and broadcast it.
+        
+        Args:
+            tx: Transaction to submit
+        
+        Returns:
+            True if transaction was added, False if it already exists
+        """
+        if self.mempool.add_transaction(tx):
+            self.logger.info(f"Transaction {tx.tx_id} added to mempool: {tx.sender} -> {tx.recipient}: {tx.amount}")
+            # Broadcast to peers
+            self.network.broadcast_transaction(tx)
+            return True
+        return False
+    
     def start(self):
         """Start the node."""
         self.logger.info("Starting node...")
