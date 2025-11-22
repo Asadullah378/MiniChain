@@ -6,6 +6,7 @@ from typing import Optional
 from src.common.config import Config
 from src.common.logger import setup_logger
 from src.chain.blockchain import Blockchain
+from src.chain.block import Transaction, Block
 from src.mempool.mempool import Mempool
 from src.consensus.poa import RoundRobinPoA
 from src.p2p.network import NetworkManager
