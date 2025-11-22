@@ -328,23 +328,35 @@ class Node:
             # Store pending proposal
             self.consensus.pending_proposal = block
             
-            # Send ACK - use hostname for consistency
-            self.logger.info(f"ACKing proposal at height {height}")
-            self.network.send_ack(height, block_hash, self.config.get_hostname())
+            # Send ACK directly to leader only
+            leader_hostname = proposer_id  # The proposer is the leader
+            self.logger.info(f"ACKing proposal at height {height} to leader {leader_hostname}")
+            self.network.send_ack(height, block_hash, self.config.get_hostname(), leader_hostname)
         
         except Exception as e:
             self.logger.error(f"Error handling proposal: {e}", exc_info=True)
     
     def _handle_ack(self, message):
-        """Handle ACK message."""
+        """Handle ACK message. Only the leader processes ACKs and checks for quorum."""
         try:
             payload = message.payload
             height = payload['height']
             voter_id = payload['voter_id']
             
-            self.consensus.add_ack(height, voter_id)
+            # Only process ACKs if we're the leader for this height
+            expected_leader = self.consensus.get_current_leader(height)
+            my_hostname = self.config.get_hostname()
             
-            # Check if we have quorum
+            if expected_leader != my_hostname:
+                # We're not the leader, ignore this ACK
+                self.logger.debug(f"Received ACK for height {height} but we're not the leader (leader: {expected_leader})")
+                return
+            
+            # We're the leader, process the ACK
+            self.consensus.add_ack(height, voter_id)
+            self.logger.info(f"Received ACK from {voter_id} for height {height}")
+            
+            # Check if we have quorum (only leader checks)
             if self.consensus.has_quorum(height):
                 self.logger.info(f"Quorum reached for height {height}, committing block")
                 if self.consensus.pending_proposal:

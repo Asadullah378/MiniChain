@@ -224,8 +224,16 @@ class NetworkManager:
         )
         self._broadcast(message)
     
-    def send_ack(self, height: int, block_hash: bytes, voter_id: str):
-        """Send ACK message (broadcast to all, but typically only leader processes it)."""
+    def send_ack(self, height: int, block_hash: bytes, voter_id: str, leader_hostname: str):
+        """
+        Send ACK message directly to the leader.
+        
+        Args:
+            height: Block height
+            block_hash: Block hash
+            voter_id: Voter's identifier
+            leader_hostname: Hostname of the leader to send ACK to
+        """
         # For simplicity, we'll sign with empty signature for now
         # In production, this should be signed with node's private key
         message = Message.create_ack(
@@ -235,7 +243,57 @@ class NetworkManager:
             voter_id,
             b''  # TODO: Add proper signature
         )
-        self._broadcast(message)
+        # Send only to leader, not broadcast
+        self._send_to_leader(message, leader_hostname)
+    
+    def _send_to_leader(self, message: Message, leader_hostname: str):
+        """Send a message to a specific leader node."""
+        # Extract short hostname for matching (e.g., "svm-11-3" from "svm-11-3.cs.helsinki.fi")
+        leader_short = leader_hostname.split('.')[0]
+        
+        # First, try to find in existing connections
+        with self.connection_lock:
+            for peer_address, sock in self.connections.items():
+                # Extract hostname from peer_address (format: "hostname:port")
+                peer_hostname = peer_address.split(':')[0]
+                peer_short = peer_hostname.split('.')[0]
+                
+                # Match by full hostname or short hostname
+                if (leader_hostname == peer_hostname or 
+                    leader_short == peer_short or
+                    leader_hostname in peer_hostname or
+                    peer_hostname in leader_hostname):
+                    try:
+                        self._send_message(sock, message)
+                        self.logger.debug(f"Sent ACK to leader {leader_hostname} at {peer_address}")
+                        return
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send to leader {leader_hostname} at {peer_address}: {e}")
+        
+        # If not found in connections, try to find by hostname in peers list
+        for peer in self.peers:
+            peer_hostname = peer.get('hostname', '')
+            peer_short = peer_hostname.split('.')[0] if peer_hostname else ''
+            
+            if (leader_hostname == peer_hostname or 
+                leader_short == peer_short or
+                leader_hostname in peer_hostname):
+                # Try to connect and send
+                try:
+                    hostname = peer.get('hostname')
+                    port = peer.get('port', self.port)
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(5)
+                    sock.connect((hostname, port))
+                    sock.settimeout(None)
+                    self._send_message(sock, message)
+                    sock.close()
+                    self.logger.debug(f"Sent ACK to leader {leader_hostname} via new connection")
+                    return
+                except Exception as e:
+                    self.logger.warning(f"Failed to send ACK to leader {leader_hostname}: {e}")
+        
+        self.logger.warning(f"Could not find connection to leader {leader_hostname} for ACK")
     
     def broadcast_commit(self, height: int, block_hash: bytes, leader_id: str):
         """Broadcast COMMIT message."""
