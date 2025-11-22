@@ -348,24 +348,30 @@ class Node:
             if self.consensus.has_quorum(height):
                 self.logger.info(f"Quorum reached for height {height}, committing block")
                 if self.consensus.pending_proposal:
+                    # Save block hash before on_block_committed clears pending_proposal
+                    block = self.consensus.pending_proposal
+                    block_hash = block.block_hash
+                    tx_ids = [tx.tx_id for tx in block.transactions]
+                    
                     # Commit the block
-                    if self.blockchain.add_block(self.consensus.pending_proposal):
+                    if self.blockchain.add_block(block):
                         # Remove transactions from mempool
-                        tx_ids = [tx.tx_id for tx in self.consensus.pending_proposal.transactions]
                         self.mempool.remove_transactions(tx_ids)
                         
-                        # Update consensus state
+                        # Update consensus state (this clears pending_proposal)
                         self.consensus.on_block_committed(height)
                         
                         # Broadcast COMMIT - use hostname for consistency
                         self.network.broadcast_commit(
                             height,
-                            self.consensus.pending_proposal.block_hash,
+                            block_hash,  # Use saved block_hash
                             self.config.get_hostname()
                         )
                         self.logger.info(f"Block {height} committed")
                     else:
                         self.logger.error(f"Failed to add block {height} to chain")
+                else:
+                    self.logger.warning(f"Quorum reached for height {height} but no pending proposal")
         
         except Exception as e:
             self.logger.error(f"Error handling ACK: {e}", exc_info=True)
