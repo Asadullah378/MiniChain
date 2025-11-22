@@ -33,6 +33,7 @@ def setup_logger(
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level.upper()))
     logger.handlers.clear()  # Remove any existing handlers
+    logger.propagate = False  # Prevent propagation to parent loggers to avoid duplicate messages
     
     # Create formatters
     if HAS_COLORLOG and console:
