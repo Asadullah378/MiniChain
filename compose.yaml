@@ -1,0 +1,22 @@
+services:
+  client_A:
+    build: .
+    container_name: client_A
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./seed_addresses/client_A_local.json:/app/seed_addresses.json
+  client_B:
+    build: .
+    container_name: client_B
+    ports:
+      - "5001:5000"
+    volumes:
+      - ./seed_addresses/client_B_local.json:/app/seed_addresses.json
+  client_C:
+    build: .
+    container_name: client_C
+    ports:
+      - "5002:5000"
+    volumes:
+      - ./seed_addresses/client_C_local.json:/app/seed_addresses.json
