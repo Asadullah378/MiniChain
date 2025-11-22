@@ -88,6 +88,16 @@ python src/main.py \
   --peers "svm-11-2.cs.helsinki.fi:8000,svm-11-3.cs.helsinki.fi:8000"
 ```
 
+**To see debug logs**, add `--log-level DEBUG`:
+
+```bash
+python src/main.py \
+  --node-id svm-11 \
+  --port 8000 \
+  --peers "svm-11-2.cs.helsinki.fi:8000,svm-11-3.cs.helsinki.fi:8000" \
+  --log-level DEBUG
+```
+
 ### On VM 2 (svm-11-2.cs.helsinki.fi):
 
 ```bash

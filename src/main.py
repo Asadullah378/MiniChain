@@ -42,6 +42,12 @@ def main():
         action='store_true',
         help='Disable interactive CLI (run in background mode)'
     )
+    parser.add_argument(
+        '--log-level',
+        type=str,
+        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+        help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)'
+    )
     
     args = parser.parse_args()
     
@@ -68,10 +74,13 @@ def main():
     # Determine if CLI will be enabled
     cli_enabled = not args.no_cli
     
+    # Override log level if specified
+    log_level = args.log_level or config.get('logging.level', 'INFO')
+    
     # Setup logger - disable console output if CLI is enabled
     logger = setup_logger(
         'minichain',
-        level=config.get('logging.level', 'INFO'),
+        level=log_level,
         log_file=config.get('logging.file'),
         console=config.get('logging.console', True) and not cli_enabled  # Disable console if CLI enabled
     )

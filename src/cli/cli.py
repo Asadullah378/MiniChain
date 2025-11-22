@@ -119,6 +119,9 @@ Available Commands:
                          Example: block 5
   mempool, pool        - Show pending transactions in mempool
   peers                - Show connected peers
+  logs [n]             - Show last n lines from log file (default: 20)
+                         Example: logs 50
+                         Note: Use --log-level DEBUG to see debug logs
   clear                - Clear screen
   exit, quit, q        - Exit the node
 
