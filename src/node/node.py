@@ -211,16 +211,17 @@ class Node:
             tx_list = [bytes.fromhex(tx_hex) for tx_hex in payload['tx_list']]
             proposer_id = payload['proposer_id']
             block_hash = bytes.fromhex(payload['block_hash'])
+            timestamp = payload.get('timestamp', time.time())  # Use timestamp from message
             
             # Deserialize transactions
             transactions = [Transaction.deserialize(tx_bytes) for tx_bytes in tx_list]
             
-            # Create block
+            # Create block with the original timestamp from the proposal
             block = Block(
                 height=height,
                 prev_hash=prev_hash,
                 transactions=transactions,
-                timestamp=time.time(),
+                timestamp=timestamp,
                 proposer_id=proposer_id,
                 block_hash=block_hash
             )
@@ -228,6 +229,14 @@ class Node:
             # Validate block
             if not self._validate_proposal(block):
                 self.logger.warning(f"Invalid proposal at height {height}")
+                # Log more details for debugging
+                expected_height = self.blockchain.get_height() + 1
+                expected_prev_hash = self.blockchain.get_latest_hash()
+                expected_leader = self.consensus.get_current_leader(height)
+                self.logger.debug(f"  Expected height: {expected_height}, got: {height}")
+                self.logger.debug(f"  Expected prev_hash: {expected_prev_hash.hex()[:16]}..., got: {prev_hash.hex()[:16]}...")
+                self.logger.debug(f"  Expected leader: {expected_leader}, got: {proposer_id}")
+                self.logger.debug(f"  Block hash matches: {block.block_hash == block_hash}")
                 return
             
             # Store pending proposal
@@ -340,18 +349,30 @@ class Node:
         # Check height
         expected_height = self.blockchain.get_height() + 1
         if block.height != expected_height:
+            self.logger.debug(f"Height mismatch: expected {expected_height}, got {block.height}")
             return False
         
         # Check previous hash
-        if block.prev_hash != self.blockchain.get_latest_hash():
+        expected_prev_hash = self.blockchain.get_latest_hash()
+        if block.prev_hash != expected_prev_hash:
+            self.logger.debug(f"Prev hash mismatch: expected {expected_prev_hash.hex()[:16]}..., got {block.prev_hash.hex()[:16]}...")
             return False
         
         # Check proposer is correct leader
-        if block.proposer_id != self.consensus.get_current_leader(block.height):
+        expected_leader = self.consensus.get_current_leader(block.height)
+        if block.proposer_id != expected_leader:
+            self.logger.debug(f"Leader mismatch: expected {expected_leader}, got {block.proposer_id}")
+            return False
+        
+        # Check block hash matches computed hash
+        computed_hash = block.compute_hash()
+        if block.block_hash != computed_hash:
+            self.logger.debug(f"Block hash mismatch: expected {computed_hash.hex()[:16]}..., got {block.block_hash.hex()[:16]}...")
             return False
         
         # Check block structure
         if not block.is_valid():
+            self.logger.debug("Block structure validation failed")
             return False
         
         return True

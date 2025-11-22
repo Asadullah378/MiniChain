@@ -90,7 +90,7 @@ class Message:
     @classmethod
     def create_propose(cls, sender_id: str, height: int, prev_hash: bytes, 
                       tx_list: List[bytes], proposer_id: str, 
-                      block_hash: bytes, signature: bytes) -> 'Message':
+                      block_hash: bytes, timestamp: float, signature: bytes) -> 'Message':
         """Create a block proposal message."""
         return cls(
             type=MessageType.PROPOSE,
@@ -101,6 +101,7 @@ class Message:
                 'tx_list': [tx.hex() for tx in tx_list],
                 'proposer_id': proposer_id,
                 'block_hash': block_hash.hex(),
+                'timestamp': timestamp,
                 'signature': signature.hex()
             }
         )

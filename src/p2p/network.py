@@ -219,6 +219,7 @@ class NetworkManager:
             tx_list,
             block.proposer_id,
             block.block_hash,
+            block.timestamp,
             block.signature
         )
         self._broadcast(message)
