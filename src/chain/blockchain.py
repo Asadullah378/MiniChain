@@ -31,7 +31,17 @@ class Blockchain:
                 with open(chain_file, 'r') as f:
                     chain_data = json.load(f)
                     self.chain = [Block.from_dict(block_data) for block_data in chain_data]
-                print(f"Loaded blockchain with {len(self.chain)} blocks")
+                
+                # Validate genesis block matches expected deterministic genesis
+                if len(self.chain) > 0:
+                    expected_genesis = create_genesis_block(proposer_id="genesis")
+                    if self.chain[0].block_hash != expected_genesis.block_hash:
+                        print(f"Warning: Genesis block doesn't match expected. Recreating chain.")
+                        self._create_genesis()
+                    else:
+                        print(f"Loaded blockchain with {len(self.chain)} blocks")
+                else:
+                    self._create_genesis()
             except Exception as e:
                 print(f"Error loading chain: {e}. Creating new chain.")
                 self._create_genesis()
@@ -40,7 +50,8 @@ class Blockchain:
     
     def _create_genesis(self):
         """Create and add genesis block."""
-        genesis = create_genesis_block()
+        # Use fixed proposer_id for deterministic genesis block
+        genesis = create_genesis_block(proposer_id="genesis")
         self.chain = [genesis]
         self._save_chain()
     

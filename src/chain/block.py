@@ -159,11 +159,14 @@ class Block:
 
 def create_genesis_block(proposer_id: str = "genesis") -> Block:
     """Create the genesis block."""
+    # Use fixed timestamp for deterministic genesis block across all nodes
+    # This ensures all nodes have the same genesis block hash
+    genesis_timestamp = 0.0  # Fixed timestamp for genesis
     return Block(
         height=0,
         prev_hash=b'\x00' * 32,  # All zeros for genesis
         transactions=[],
-        timestamp=time.time(),
+        timestamp=genesis_timestamp,
         proposer_id=proposer_id,
         block_hash=b''  # Will be computed in __post_init__
     )

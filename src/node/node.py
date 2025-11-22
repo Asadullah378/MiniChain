@@ -38,15 +38,23 @@ class Node:
         self.blockchain = Blockchain(data_dir=config.get_data_dir())
         self.mempool = Mempool()
         
-        # Get validator list (for now, use peers + self)
-        validator_ids = [config.get_node_id()]
+        # Get validator list - use hostname consistently for all validators
+        # This ensures all nodes use the same validator IDs
+        my_hostname = config.get_hostname()
+        validator_ids = [my_hostname]
         for peer in config.get_peers():
-            # Use hostname as validator ID
-            validator_ids.append(peer.get('hostname', peer.get('node_id', 'unknown')))
+            # Use hostname as validator ID (prefer hostname over node_id for consistency)
+            peer_hostname = peer.get('hostname', peer.get('node_id', 'unknown'))
+            validator_ids.append(peer_hostname)
         validator_ids = sorted(list(set(validator_ids)))  # Remove duplicates and sort
         
+        # Log validator list for debugging
+        self.logger.info(f"Validator list: {validator_ids}")
+        self.logger.info(f"My node ID: {config.get_node_id()}, My hostname: {my_hostname}")
+        
+        # Use hostname as node_id for consensus to ensure consistency
         self.consensus = RoundRobinPoA(
-            node_id=config.get_node_id(),
+            node_id=my_hostname,  # Use hostname instead of node_id for consistency
             validator_ids=validator_ids,
             block_interval=config.get('consensus.block_interval', 5),
             proposal_timeout=config.get('consensus.proposal_timeout', 10),
@@ -259,9 +267,9 @@ class Node:
             # Store pending proposal
             self.consensus.pending_proposal = block
             
-            # Send ACK
+            # Send ACK - use hostname for consistency
             self.logger.info(f"ACKing proposal at height {height}")
-            self.network.send_ack(height, block_hash, self.config.get_node_id())
+            self.network.send_ack(height, block_hash, self.config.get_hostname())
         
         except Exception as e:
             self.logger.error(f"Error handling proposal: {e}", exc_info=True)
@@ -288,11 +296,11 @@ class Node:
                         # Update consensus state
                         self.consensus.on_block_committed(height)
                         
-                        # Broadcast COMMIT
+                        # Broadcast COMMIT - use hostname for consistency
                         self.network.broadcast_commit(
                             height,
                             self.consensus.pending_proposal.block_hash,
-                            self.config.get_node_id()
+                            self.config.get_hostname()
                         )
                         self.logger.info(f"Block {height} committed")
                     else:
