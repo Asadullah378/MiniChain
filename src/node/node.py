@@ -2,7 +2,8 @@
 
 import threading
 import time
-from typing import Optional
+import socket
+from typing import Optional, List
 from src.common.config import Config
 from src.common.logger import setup_logger
 from src.chain.blockchain import Blockchain
@@ -38,23 +39,83 @@ class Node:
         self.blockchain = Blockchain(data_dir=config.get_data_dir())
         self.mempool = Mempool()
         
-        # Get validator list - use hostname consistently for all validators
-        # This ensures all nodes use the same validator IDs
+        # Get validator list - CRITICAL: All nodes must have the EXACT same validator list
+        # Strategy: Build from peers + self, normalize to ensure consistency
         my_hostname = config.get_hostname()
-        validator_ids = [my_hostname]
+        my_node_id = config.get_node_id()
+        
+        # Collect all validator hostnames
+        validator_hostnames: List[str] = []
+        
+        # Add all peer hostnames (these are explicitly configured, so use as-is)
         for peer in config.get_peers():
-            # Use hostname as validator ID (prefer hostname over node_id for consistency)
             peer_hostname = peer.get('hostname', peer.get('node_id', 'unknown'))
-            validator_ids.append(peer_hostname)
-        validator_ids = sorted(list(set(validator_ids)))  # Remove duplicates and sort
+            if peer_hostname and peer_hostname != 'unknown':
+                validator_hostnames.append(peer_hostname)
+        
+        # Add our own hostname
+        validator_hostnames.append(my_hostname)
+        
+        # Normalize: If we have a mix of FQDNs and short names, prefer FQDNs
+        # Extract short names (part before first dot)
+        short_to_full: dict = {}
+        for hostname in validator_hostnames:
+            short = hostname.split('.')[0]
+            if '.' in hostname:
+                # It's a FQDN - prefer this over short name
+                if short not in short_to_full or '.' not in short_to_full[short]:
+                    short_to_full[short] = hostname
+        
+        # Build normalized list: use FQDN if available, otherwise short name
+        normalized_validators = []
+        seen_shorts = set()
+        for hostname in validator_hostnames:
+            short = hostname.split('.')[0]
+            if short in short_to_full and short_to_full[short] != hostname:
+                # We have a FQDN version, use that instead
+                if short_to_full[short] not in normalized_validators:
+                    normalized_validators.append(short_to_full[short])
+                    seen_shorts.add(short)
+            elif short not in seen_shorts:
+                # Use as-is (either it's already FQDN or we don't have FQDN)
+                normalized_validators.append(hostname)
+                seen_shorts.add(short)
+        
+        # Sort for deterministic ordering - CRITICAL for consistent leader selection
+        validator_ids = sorted(normalized_validators)
         
         # Log validator list for debugging
-        self.logger.info(f"Validator list: {validator_ids}")
-        self.logger.info(f"My node ID: {config.get_node_id()}, My hostname: {my_hostname}")
+        self.logger.info(f"Validator list (sorted, normalized): {validator_ids}")
+        self.logger.info(f"My node ID: {my_node_id}, My hostname: {my_hostname}")
         
-        # Use hostname as node_id for consensus to ensure consistency
+        # Determine which identifier to use for consensus - must match one in validator_ids
+        consensus_node_id = my_hostname
+        
+        # Try to find our hostname in the normalized list
+        if my_hostname not in validator_ids:
+            # Try to match (handle short name vs FQDN)
+            my_short = my_hostname.split('.')[0]
+            matched = False
+            for vid in validator_ids:
+                vid_short = vid.split('.')[0]
+                if vid == my_hostname or my_short == vid_short:
+                    consensus_node_id = vid
+                    matched = True
+                    self.logger.info(f"Matched '{my_hostname}' to normalized validator '{vid}'")
+                    break
+            
+            if not matched:
+                self.logger.error(
+                    f"ERROR: Cannot match '{my_hostname}' to any validator in {validator_ids}. "
+                    f"Please ensure --node-id matches one of the peer hostnames."
+                )
+                self.logger.error(f"  Valid options: {', '.join(validator_ids)}")
+        
+        self.logger.info(f"Using consensus node_id: {consensus_node_id}")
+        
+        # Use the matched node_id for consensus
         self.consensus = RoundRobinPoA(
-            node_id=my_hostname,  # Use hostname instead of node_id for consistency
+            node_id=consensus_node_id,  # Must be in validator_ids
             validator_ids=validator_ids,
             block_interval=config.get('consensus.block_interval', 5),
             proposal_timeout=config.get('consensus.proposal_timeout', 10),
