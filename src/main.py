@@ -65,12 +65,15 @@ def main():
                 peers.append({'hostname': peer_str, 'port': config.get_port()})
         config.config['network']['peers'] = peers
     
-    # Setup logger
+    # Determine if CLI will be enabled
+    cli_enabled = not args.no_cli
+    
+    # Setup logger - disable console output if CLI is enabled
     logger = setup_logger(
         'minichain',
         level=config.get('logging.level', 'INFO'),
         log_file=config.get('logging.file'),
-        console=config.get('logging.console', True)
+        console=config.get('logging.console', True) and not cli_enabled  # Disable console if CLI enabled
     )
     
     logger.info(f"Starting MiniChain node: {config.get_node_id()}")
@@ -80,12 +83,12 @@ def main():
     
     # Create and start node
     try:
-        node = Node(config)
+        node = Node(config, disable_console_logging=cli_enabled)
         
         # Start CLI in interactive mode (unless disabled)
         cli = None
-        if not args.no_cli:
-            cli = CLI(node)
+        if cli_enabled:
+            cli = CLI(node, log_file=config.get('logging.file'))
             cli.start()
         
         # Start node (this will block until interrupted)

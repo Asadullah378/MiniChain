@@ -11,14 +11,16 @@ from src.common.crypto import hash_string
 class CLI:
     """Command-line interface for interacting with a MiniChain node."""
     
-    def __init__(self, node: Node):
+    def __init__(self, node: Node, log_file: Optional[str] = None):
         """
         Initialize CLI with a node instance.
         
         Args:
             node: Node instance to interact with
+            log_file: Path to log file for viewing logs
         """
         self.node = node
+        self.log_file = log_file
         self.running = False
         self.cli_thread: Optional[threading.Thread] = None
     
@@ -91,6 +93,8 @@ class CLI:
             self._show_mempool()
         elif cmd == 'peers':
             self._show_peers()
+        elif cmd == 'logs':
+            self._show_logs(args)
         elif cmd == 'clear':
             print("\n" * 50)  # Clear screen (simple version)
         elif cmd == 'exit' or cmd == 'quit' or cmd == 'q':
@@ -293,4 +297,84 @@ Examples:
                 print(f"  - {peer_address}")
         
         print("="*60 + "\n")
+    
+    def _show_logs(self, args):
+        """Show last n lines from log file."""
+        if not self.log_file:
+            print("No log file configured.")
+            return
+        
+        try:
+            from pathlib import Path
+            log_path = Path(self.log_file)
+            
+            if not log_path.exists():
+                print(f"Log file not found: {self.log_file}")
+                return
+            
+            # Default to 20 lines if not specified
+            num_lines = 20
+            if args:
+                try:
+                    num_lines = int(args[0])
+                    if num_lines <= 0:
+                        print("Error: Number of lines must be positive")
+                        return
+                except ValueError:
+                    print("Error: Number of lines must be a number")
+                    return
+            
+            # Read last n lines from file
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+                last_lines = lines[-num_lines:] if len(lines) > num_lines else lines
+            
+            print(f"\nLast {len(last_lines)} lines from {self.log_file}:")
+            print("="*80)
+            for line in last_lines:
+                print(line.rstrip())
+            print("="*80 + "\n")
+        
+        except Exception as e:
+            print(f"Error reading log file: {e}")
+    
+    def _show_logs(self, args):
+        """Show last n lines from log file."""
+        if not self.log_file:
+            print("No log file configured.")
+            return
+        
+        try:
+            from pathlib import Path
+            log_path = Path(self.log_file)
+            
+            if not log_path.exists():
+                print(f"Log file not found: {self.log_file}")
+                return
+            
+            # Default to 20 lines if not specified
+            num_lines = 20
+            if args:
+                try:
+                    num_lines = int(args[0])
+                    if num_lines <= 0:
+                        print("Error: Number of lines must be positive")
+                        return
+                except ValueError:
+                    print("Error: Number of lines must be a number")
+                    return
+            
+            # Read last n lines from file
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                lines = f.readlines()
+                last_lines = lines[-num_lines:] if len(lines) > num_lines else lines
+            
+            print(f"\nLast {len(last_lines)} lines from {self.log_file}:")
+            print("="*80)
+            for line in last_lines:
+                print(line.rstrip())
+            print("="*80 + "\n")
+        
+        except Exception as e:
+            print(f"Error reading log file: {e}")
 

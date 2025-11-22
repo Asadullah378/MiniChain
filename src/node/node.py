@@ -15,19 +15,20 @@ from src.p2p.network import NetworkManager
 class Node:
     """Main node that coordinates blockchain, consensus, and networking."""
     
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, disable_console_logging: bool = False):
         """
         Initialize node with configuration.
         
         Args:
             config: Node configuration
+            disable_console_logging: If True, disable console output for loggers
         """
         self.config = config
         self.logger = setup_logger(
             'minichain.node',
             level=config.get('logging.level', 'INFO'),
             log_file=config.get('logging.file'),
-            console=config.get('logging.console', True)
+            console=config.get('logging.console', True) and not disable_console_logging
         )
         
         # Initialize components
