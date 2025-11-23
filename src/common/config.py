@@ -24,7 +24,7 @@ class Config:
     
     def _find_config_file(self) -> str:
         """Find configuration file in standard locations."""
-        # Check current directory
+        # Check current directory first (preferred)
         local_config = Path("config.yaml")
         if local_config.exists():
             return str(local_config)
@@ -36,7 +36,7 @@ class Config:
             if default_config.exists():
                 return str(default_config)
         
-        # Return default path
+        # Return default path (will use defaults if file doesn't exist)
         return "config.yaml"
     
     def _load_config(self) -> Dict[str, Any]:

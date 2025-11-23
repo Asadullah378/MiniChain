@@ -1,36 +1,63 @@
 #!/bin/bash
 # Setup script for MiniChain
-# Installs dependencies and creates necessary directories
+# Checks Python, creates virtual environment, and installs dependencies
 
-echo "Setting up MiniChain..."
+set -e  # Exit on error
+
+echo "=========================================="
+echo "MiniChain Setup"
+echo "=========================================="
+echo ""
 
 # Check Python version
-python_version=$(python3 --version 2>&1 | awk '{print $2}')
-echo "Python version: $python_version"
+echo "Checking Python installation..."
+if ! command -v python3 &> /dev/null; then
+    echo "ERROR: Python 3 is not installed. Please install Python 3.8 or higher."
+    exit 1
+fi
 
-# Create virtual environment (optional but recommended)
+python_version=$(python3 --version 2>&1 | awk '{print $2}')
+echo "Found Python: $python_version"
+
+# Check Python version is 3.8+
+python_major=$(echo $python_version | cut -d. -f1)
+python_minor=$(echo $python_version | cut -d. -f2)
+if [ "$python_major" -lt 3 ] || ([ "$python_major" -eq 3 ] && [ "$python_minor" -lt 8 ]); then
+    echo "ERROR: Python 3.8 or higher is required. Found: $python_version"
+    exit 1
+fi
+
+echo "✓ Python version OK"
+echo ""
+
+# Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
     python3 -m venv venv
+    echo "✓ Virtual environment created"
+else
+    echo "Virtual environment already exists"
 fi
 
+echo ""
+
 # Activate virtual environment
-source venv/bin/activate 2>/dev/null || true
+echo "Activating virtual environment..."
+source venv/bin/activate
+
+# Upgrade pip
+echo "Upgrading pip..."
+pip install --upgrade pip --quiet
 
 # Install dependencies
 echo "Installing dependencies..."
-pip install -r requirements.txt
+pip install -r requirements.txt --quiet
 
-# Create data directory
-mkdir -p data
-
-# Make run script executable
-chmod +x run_node.sh 2>/dev/null || true
-
-echo "Setup complete!"
 echo ""
-echo "To run a node, use:"
-echo "  python src/main.py --node-id <id> --port <port> --peers <peer1>,<peer2>,..."
-echo "Or use the helper script:"
-echo "  ./run_node.sh <node_id> <port> <peer1> <peer2> ..."
-
+echo "=========================================="
+echo "Setup complete!"
+echo "=========================================="
+echo ""
+echo "To start a node, run:"
+echo "  ./start.sh"
+echo ""

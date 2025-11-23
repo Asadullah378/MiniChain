@@ -1,0 +1,9 @@
+# MiniChain Peers Configuration
+# Format: hostname:port (one per line)
+# The start.sh script will automatically detect which machine it's running on
+# and configure the node accordingly
+
+svm-11.cs.helsinki.fi:8000
+svm-11-2.cs.helsinki.fi:8000
+svm-11-3.cs.helsinki.fi:8000
+
