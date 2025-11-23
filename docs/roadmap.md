@@ -1,6 +1,7 @@
 # Roadmap
 
 ## Near-Term
+
 - Message signature verification on receive
 - STATUS request/response and metrics endpoint (Prometheus)
 - Peer reconnection & dynamic discovery (HELLO + PEERLIST exchange)
@@ -8,6 +9,7 @@
 - Configurable quorum fraction and dynamic validator set reload
 
 ## Medium-Term
+
 - Proper fork resolution with alternative chain buffering
 - Merkle tree for block transactions; receipts API
 - TLS transport and authenticated validator key registry
@@ -15,6 +17,7 @@
 - Load testing scripts for propagation & latency measurement
 
 ## Long-Term
+
 - Pluggable consensus (Raft / PBFT-lite / HotStuff phases)
 - Sharding / partitioning strategy for horizontal scaling
 - Smart contract / programmable transaction layer (WASM sandbox)

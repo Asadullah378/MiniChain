@@ -21,3 +21,7 @@ class Mempool:
 
     def size(self) -> int:
         return len(self._txs)
+
+# TRANSACTION
+# SENDER
+# RECEIVER

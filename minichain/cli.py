@@ -43,6 +43,20 @@ def start(node_id, peers):
     asyncio.run(run())
 
 
+@cli.command(name="serve-api")
+@click.option("--host", default="0.0.0.0", help="HTTP host to bind")
+@click.option("--port", default=8000, type=int, help="HTTP port to bind")
+def serve_api(host, port):
+    """Launch the MiniChain dashboard REST API."""
+    try:
+        import uvicorn
+    except ImportError as exc:
+        raise click.ClickException("uvicorn is required. Install dashboard dependencies first.") from exc
+    from .api import app
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
+
+
 @cli.command()
 @click.argument("sender")
 @click.argument("to")
