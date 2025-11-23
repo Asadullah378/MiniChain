@@ -44,3 +44,4 @@ config/local_*.yaml
 Thumbs.db
 *.pdf
 
+.venv
