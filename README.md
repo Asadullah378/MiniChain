@@ -40,7 +40,7 @@ svm-11-3.cs.helsinki.fi:8000
 
 ```bash
 chmod +x start.sh
-./start.sh <hostname>
+./start.sh <hostname> [--clean]
 ```
 
 **Usage:**
@@ -49,7 +49,7 @@ chmod +x start.sh
 ```
 
 **Parameters:**
-- `hostname`: The hostname of this node (must match one in `peers.txt`)
+- `hostname`: **REQUIRED** - The hostname of this node (must match one in `peers.txt`)
 - `--clean`: Optional flag to clear all data and logs before starting
 
 **Examples:**
@@ -76,11 +76,12 @@ On svm-11-3.cs.helsinki.fi:
 ```
 
 The script will:
-- Find the provided hostname in `peers.txt`
+- Use the provided hostname (no auto-detection)
+- Find the hostname in `peers.txt`
 - Configure node_id and peers automatically
 - Start the node
 
-**Note**: If hostname is not provided, the script will auto-detect, but it's recommended to specify it explicitly.
+**Note**: Hostname is **required**. The script will exit with an error if not provided.
 
 This will remove:
 - All blockchain data (`data/` directory)

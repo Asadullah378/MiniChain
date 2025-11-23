@@ -1,7 +1,7 @@
 #!/bin/bash
 # Start script for MiniChain node
-# Usage: ./start.sh [hostname] [--clean]
-#   hostname: The hostname of this node (must match one in peers.txt)
+# Usage: ./start.sh <hostname> [--clean]
+#   hostname: The hostname of this node (must match one in peers.txt) - REQUIRED
 #   --clean:  Optional flag to clear data and logs before starting
 #
 # Example: ./start.sh svm-11.cs.helsinki.fi
@@ -20,6 +20,17 @@ for arg in "$@"; do
         NODE_HOSTNAME="$arg"
     fi
 done
+
+# Validate hostname is provided
+if [ -z "$NODE_HOSTNAME" ]; then
+    echo "ERROR: Hostname is required!"
+    echo ""
+    echo "Usage: ./start.sh <hostname> [--clean]"
+    echo ""
+    echo "Example: ./start.sh svm-11.cs.helsinki.fi"
+    echo "Example: ./start.sh svm-11.cs.helsinki.fi --clean"
+    exit 1
+fi
 
 # Clean data and logs if requested
 if [ "$CLEAN_DATA" = true ]; then
@@ -49,18 +60,11 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Get hostname from parameter or auto-detect
-if [ -z "$NODE_HOSTNAME" ]; then
-    # Auto-detect if not provided
-    NODE_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
-    echo "No hostname provided, auto-detected: $NODE_HOSTNAME"
-else
-    echo "Using provided hostname: $NODE_HOSTNAME"
-fi
-
+# Use the provided hostname
 CURRENT_HOSTNAME="$NODE_HOSTNAME"
 CURRENT_SHORT=$(echo "$NODE_HOSTNAME" | cut -d'.' -f1)
 
+echo "Using hostname: $CURRENT_HOSTNAME"
 echo ""
 
 # Check if peers file exists
