@@ -40,22 +40,47 @@ svm-11-3.cs.helsinki.fi:8000
 
 ```bash
 chmod +x start.sh
-./start.sh
+./start.sh <hostname>
 ```
 
-The script will automatically:
-- Detect the current machine's hostname
-- Find itself in `peers.txt`
-- Configure node_id and peers automatically
-- Start the node
+**Usage:**
+```bash
+./start.sh <hostname> [--clean]
+```
 
-**No parameters needed!** Just run `./start.sh` on each VM.
+**Parameters:**
+- `hostname`: The hostname of this node (must match one in `peers.txt`)
+- `--clean`: Optional flag to clear all data and logs before starting
+
+**Examples:**
+
+On svm-11.cs.helsinki.fi:
+```bash
+./start.sh svm-11.cs.helsinki.fi
+```
+
+On svm-11-2.cs.helsinki.fi:
+```bash
+./start.sh svm-11-2.cs.helsinki.fi
+```
+
+On svm-11-3.cs.helsinki.fi:
+```bash
+./start.sh svm-11-3.cs.helsinki.fi
+```
 
 **Clean Start**: To clear all data and logs before starting:
 
 ```bash
-./start.sh --clean
+./start.sh svm-11.cs.helsinki.fi --clean
 ```
+
+The script will:
+- Find the provided hostname in `peers.txt`
+- Configure node_id and peers automatically
+- Start the node
+
+**Note**: If hostname is not provided, the script will auto-detect, but it's recommended to specify it explicitly.
 
 This will remove:
 - All blockchain data (`data/` directory)

@@ -1,15 +1,25 @@
 #!/bin/bash
 # Start script for MiniChain node
-# Automatically detects the current machine and configures peers/node_id
-# Usage: ./start.sh [--clean]
+# Usage: ./start.sh [hostname] [--clean]
+#   hostname: The hostname of this node (must match one in peers.txt)
+#   --clean:  Optional flag to clear data and logs before starting
+#
+# Example: ./start.sh svm-11.cs.helsinki.fi
+# Example: ./start.sh svm-11.cs.helsinki.fi --clean
 
 set -e  # Exit on error
 
-# Check for --clean flag
+# Parse arguments
 CLEAN_DATA=false
-if [ "$1" == "--clean" ] || [ "$1" == "-c" ]; then
-    CLEAN_DATA=true
-fi
+NODE_HOSTNAME=""
+
+for arg in "$@"; do
+    if [ "$arg" == "--clean" ] || [ "$arg" == "-c" ]; then
+        CLEAN_DATA=true
+    elif [ -z "$NODE_HOSTNAME" ] && [ "$arg" != "--clean" ] && [ "$arg" != "-c" ]; then
+        NODE_HOSTNAME="$arg"
+    fi
+done
 
 # Clean data and logs if requested
 if [ "$CLEAN_DATA" = true ]; then
@@ -39,12 +49,18 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Get the current hostname (FQDN)
-CURRENT_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
-CURRENT_SHORT=$(hostname -s)
+# Get hostname from parameter or auto-detect
+if [ -z "$NODE_HOSTNAME" ]; then
+    # Auto-detect if not provided
+    NODE_HOSTNAME=$(hostname -f 2>/dev/null || hostname)
+    echo "No hostname provided, auto-detected: $NODE_HOSTNAME"
+else
+    echo "Using provided hostname: $NODE_HOSTNAME"
+fi
 
-echo "Detected hostname: $CURRENT_HOSTNAME"
-echo "Short hostname: $CURRENT_SHORT"
+CURRENT_HOSTNAME="$NODE_HOSTNAME"
+CURRENT_SHORT=$(echo "$NODE_HOSTNAME" | cut -d'.' -f1)
+
 echo ""
 
 # Check if peers file exists
@@ -108,11 +124,16 @@ for peer in "${ALL_PEERS[@]}"; do
 done
 
 if [ "$FOUND" = false ]; then
-    echo "WARNING: Current hostname ($CURRENT_HOSTNAME) not found in peers.txt"
-    echo "Using hostname as node ID: $CURRENT_HOSTNAME"
-    NODE_ID="$CURRENT_HOSTNAME"
-    # Use all peers since we're not in the list
-    PEERS_LIST=$(IFS=','; echo "${ALL_PEERS[*]}")
+    echo "ERROR: Hostname '$CURRENT_HOSTNAME' not found in peers.txt"
+    echo ""
+    echo "Available peers in peers.txt:"
+    for peer in "${ALL_PEERS[@]}"; do
+        echo "  - $peer"
+    done
+    echo ""
+    echo "Please provide a valid hostname that matches one in peers.txt"
+    echo "Usage: ./start.sh <hostname> [--clean]"
+    exit 1
 fi
 
 echo "Node ID: $NODE_ID"
