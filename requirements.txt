@@ -6,3 +6,6 @@ pyyaml>=6.0  # For configuration files
 # Optional but recommended
 colorlog>=6.8.0  # For colored logging
 
+# Testing
+pytest>=8.0.0
+
