@@ -108,4 +108,10 @@ This document explains how the MiniChain codebase fits together so you can navig
 - **View change**: `_check_timeouts` in `Node` and `should_trigger_view_change` in `RoundRobinPoA` are placeholders. Implementing them would enable automatic rotation when leaders stall.
 - **Persistence**: For higher throughput, consider swapping `chain.json` for a lightweight database (SQLite/LMDB) while keeping the `Blockchain` interface intact.
 
+## Testing & Quality
+
+- **Pytest suite**: `tests/test_block.py`, `tests/test_blockchain.py`, `tests/test_mempool.py`, and `tests/test_poa.py` cover serialization, persistence, mempool semantics, and consensus bookkeeping. Run them via `python -m pytest` from the repo root (see `pytest.ini` for settings).
+- **Future coverage**: add integration-style tests around networking (`NetworkManager`) and node orchestration once message stubs (headers/blocks/view change) are implemented.
+- **Tooling**: `setup.sh` installs dependencies into `.venv/`; activate it before running tests to ensure `msgpack`, `cryptography`, and `pytest` are available.
+
 Refer back to this document whenever you need to trace a runtime behavior to the specific module responsible.

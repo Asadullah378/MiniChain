@@ -141,6 +141,7 @@ Validation rules (target state):
 - Key events: inbound/outbound messages, proposal lifecycle, ACK quorum, timeouts, leader rotation, sync events.
 - Metrics (stretch goal): expose HTTP/Prometheus endpoint for block time, mempool size, propagation delay, ACK latency.
 - Testing hooks: CLI commands (`status`, `chain`, `block`, `logs`) and TODO items for targeted fault-injection scenarios.
+- Automated regression suite: `pytest` tests cover block serialization, blockchain persistence, mempool semantics, and PoA quorum bookkeeping. Passing the suite (`python -m pytest`) is required before each milestone demo.
 
 ---
 

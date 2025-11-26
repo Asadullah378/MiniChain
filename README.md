@@ -5,6 +5,7 @@ A simple blockchain implementation for distributed systems demonstration.
 ## Overview
 
 MiniChain is a minimal blockchain implementation that demonstrates key distributed systems concepts:
+
 - **Shared distributed state**: Replicated blockchain ledger across nodes
 - **Data consistency**: Block validation and chain synchronization
 - **Consensus**: Round-robin Proof-of-Authority (PoA) consensus
@@ -20,6 +21,7 @@ chmod +x setup.sh
 ```
 
 This will:
+
 - Check Python 3.8+ installation
 - Create virtual environment
 - Install all dependencies
@@ -44,27 +46,32 @@ chmod +x start.sh
 ```
 
 **Usage:**
+
 ```bash
 ./start.sh <hostname> [--clean]
 ```
 
 **Parameters:**
+
 - `hostname`: **REQUIRED** - The hostname of this node (must match one in `peers.txt`)
 - `--clean`: Optional flag to clear all data and logs before starting
 
 **Examples:**
 
 On svm-11.cs.helsinki.fi:
+
 ```bash
 ./start.sh svm-11.cs.helsinki.fi
 ```
 
 On svm-11-2.cs.helsinki.fi:
+
 ```bash
 ./start.sh svm-11-2.cs.helsinki.fi
 ```
 
 On svm-11-3.cs.helsinki.fi:
+
 ```bash
 ./start.sh svm-11-3.cs.helsinki.fi
 ```
@@ -76,6 +83,7 @@ On svm-11-3.cs.helsinki.fi:
 ```
 
 The script will:
+
 - Use the provided hostname (no auto-detection)
 - Find the hostname in `peers.txt`
 - Configure node_id and peers automatically
@@ -84,6 +92,7 @@ The script will:
 **Note**: Hostname is **required**. The script will exit with an error if not provided.
 
 This will remove:
+
 - All blockchain data (`data/` directory)
 - All log files (`minichain.log`)
 
@@ -95,15 +104,15 @@ Edit `config.yaml` to adjust blockchain and consensus parameters:
 
 ```yaml
 consensus:
-  block_interval: 5      # Seconds between block proposals
-  proposal_timeout: 10    # Seconds to wait for ACKs
-  quorum_size: 2         # Minimum ACKs needed (for 3 nodes: 2/3)
+  block_interval: 5 # Seconds between block proposals
+  proposal_timeout: 10 # Seconds to wait for ACKs
+  quorum_size: 2 # Minimum ACKs needed (for 3 nodes: 2/3)
 
 blockchain:
-  max_block_size: 100    # Max transactions per block
+  max_block_size: 100 # Max transactions per block
 
 logging:
-  level: "INFO"          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO" # DEBUG, INFO, WARNING, ERROR, CRITICAL
   file: "minichain.log"
   console: true
 ```
@@ -121,6 +130,7 @@ svm-11-3.cs.helsinki.fi:8000
 ```
 
 The `start.sh` script automatically:
+
 - Detects which machine it's running on
 - Sets node_id to the matching hostname
 - Configures peers (all other nodes in the list)
@@ -132,12 +142,15 @@ When you start a node, an interactive CLI automatically launches. Use it to subm
 ### Available Commands
 
 #### `help` or `h`
+
 Show help message with all available commands.
 
 #### `submit <sender> <recipient> <amount>`
+
 Submit a new transaction to the blockchain.
 
 **Example:**
+
 ```
 minichain> submit alice bob 10.5
 ✓ Transaction submitted: a1b2c3d4e5f6g7h8
@@ -145,6 +158,7 @@ minichain> submit alice bob 10.5
 ```
 
 #### `status` or `info`
+
 Display current node status and blockchain information.
 
 ```
@@ -165,6 +179,7 @@ I am Leader:    No (for next block)
 ```
 
 #### `chain [limit]`
+
 Show a summary of recent blocks (default: 10).
 
 ```
@@ -172,6 +187,7 @@ minichain> chain 5
 ```
 
 #### `block <height>`
+
 Show detailed information about a specific block.
 
 ```
@@ -179,12 +195,15 @@ minichain> block 5
 ```
 
 #### `mempool` or `pool`
+
 Show pending transactions in mempool.
 
 #### `peers`
+
 Show connected peer nodes.
 
 #### `logs [n]`
+
 Show last n lines from log file (default: 20).
 
 ```
@@ -192,14 +211,17 @@ minichain> logs 50
 ```
 
 **Note**: Use `--log-level DEBUG` when starting to see debug logs:
+
 ```bash
 ./start.sh --log-level DEBUG
 ```
 
 #### `clear`
+
 Clear screen.
 
 #### `exit`, `quit`, or `q`
+
 Exit the node.
 
 ## Architecture
@@ -335,9 +357,31 @@ python3 src/main.py \
   --config custom_config.yaml
 ```
 
+## Testing
+
+MiniChain ships with a lightweight `pytest` suite that exercises the block/mempool primitives, blockchain persistence, and consensus helpers. Run it from the repo root **after activating the project virtual environment** so that dependencies such as `msgpack`, `cryptography`, and `pytest` are available:
+
+```bash
+source .venv/bin/activate  # created via ./setup.sh
+pip install -r requirements.txt  # no-op if already installed
+pytest -q                      # or python -m pytest
+```
+
+Tests live under `tests/` and can be filtered (e.g., `pytest tests/test_poa.py -k quorum`). The suite expects the dependencies listed in `requirements.txt`—rerun `setup.sh` if the environment gets out of sync.
+
+## Documentation
+
+- `docs/ARCHITECTURE.md` – runtime wiring, lifecycles, and extension points.
+- `PRD.md` – product requirements, personas, milestones, and risks.
+- `TODO.md` – backlog aligned with the PRD milestones.
+- `PYTEST.md` – detailed instructions for running/extending the automated test suite.
+
+Keep these documents in sync when features land so reviewers can trace code back to the design intent.
+
 ## Development
 
 The codebase is designed to be:
+
 - **Modular**: Each component is independent
 - **Configurable**: Easy to adjust for different deployments
 - **Extensible**: Easy to add new features
