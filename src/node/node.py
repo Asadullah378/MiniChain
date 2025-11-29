@@ -249,6 +249,10 @@ class Node:
                 self._handle_getheaders(message, peer_address)
             elif msg_type.value == "GETBLOCKS":
                 self._handle_getblocks(message, peer_address)
+            elif msg_type.value == "HEADERS":
+                self._handle_headers(message)
+            elif msg_type.value == "BLOCK":
+                self._handle_blocks(message)
             else:
                 self.logger.debug(f"Unhandled message type: {msg_type.value}")
         
@@ -457,6 +461,8 @@ class Node:
             
             headers = self.blockchain.get_block_headers(from_height, to_height)
             self.network.send_headers(headers, peer_address)
+            
+            self.logger.info(f"Sent headers {from_height} to {to_height} to {peer_address}")
         
         except Exception as e:
             self.logger.error(f"Error handling GETHEADERS: {e}", exc_info=True)
@@ -471,6 +477,36 @@ class Node:
             blocks = self.blockchain.get_blocks(from_height, to_height)
             for block in blocks:
                 self.network.send_block(block, peer_address)
+                
+            self.logger.info(f"Sent blocks {from_height} to {to_height} to {peer_address}")
+        
+        except Exception as e:
+            self.logger.error(f"Error handling GETBLOCKS: {e}", exc_info=True)
+            
+    def _handle_headers(self, message):
+        """Handle HEADERS message."""
+        try:
+            payload = message.payload
+            headers = payload['headers']
+            
+            for header_dict in headers:
+                self.logger.info(f"Received {header_dict.keys()} from HEADERS message")
+        
+        except Exception as e:
+            self.logger.error(f"Error handling GETHEADERS: {e}", exc_info=True)
+    
+    def _handle_blocks(self, message):
+        """Handle BLOCKS message."""
+        try:
+            payload = message.payload
+            blocks = payload['block']
+            
+            for block_dict in blocks:
+                block = Block.from_dict(block_dict)
+                if self.blockchain.add_block(block):
+                    self.logger.info(f"Added block {block.height} from BLOCKS message")
+                else:
+                    self.logger.warning(f"Failed to add block {block.height} from BLOCKS message")
         
         except Exception as e:
             self.logger.error(f"Error handling GETBLOCKS: {e}", exc_info=True)

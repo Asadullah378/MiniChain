@@ -184,3 +184,24 @@ class Message:
             }
         )
 
+    @classmethod
+    def create_headers(cls, sender_id: str, headers: List[Dict[str, Any]]) -> 'Message':
+        """Create a HEADERS message."""
+        return cls(
+            type=MessageType.HEADERS,
+            sender_id=sender_id,
+            payload={
+                'headers': headers
+            }
+        )
+        
+    @classmethod
+    def create_block(cls, sender_id: str, block: List[Dict[str, Any]]) -> 'Message':
+        """Create a BLOCKS message."""
+        return cls(
+            type=MessageType.BLOCK,
+            sender_id=sender_id,
+            payload={
+                'block': block
+            }
+        )

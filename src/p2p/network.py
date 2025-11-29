@@ -308,11 +308,31 @@ class NetworkManager:
     
     def send_headers(self, headers: List[Dict], peer_address: str):
         """Send block headers to a peer."""
-        # TODO: Implement HEADERS message
-        pass
+        message = Message.create_headers(
+            self.node_id,
+            headers
+        )
+        if peer_address in self.connections:
+            try:
+                sock = self.connections[peer_address]
+                self._send_message(sock, message)
+            except Exception as e:
+                self.logger.warning(f"Failed to send headers to {peer_address}: {e}")
+        else:
+            self.logger.warning(f"Cannot send headers, no connection to {peer_address}")
     
     def send_block(self, block: Block, peer_address: str):
         """Send a block to a peer."""
-        # TODO: Implement BLOCK message
-        pass
+        message = Message.create_block(
+            self.node_id,
+            block
+        )
+        if peer_address in self.connections:
+            try:
+                sock = self.connections[peer_address]
+                self._send_message(sock, message)
+            except Exception as e:
+                self.logger.warning(f"Failed to send block to {peer_address}: {e}")
+        else:
+            self.logger.warning(f"Cannot send block, no connection to {peer_address}")
 
