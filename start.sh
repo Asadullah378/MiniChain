@@ -13,11 +13,17 @@ set -e  # Exit on error
 CLEAN_DATA=false
 NODE_HOSTNAME=""
 
+EXTRA_ARGS=()
+
 for arg in "$@"; do
     if [ "$arg" == "--clean" ] || [ "$arg" == "-c" ]; then
         CLEAN_DATA=true
-    elif [ -z "$NODE_HOSTNAME" ] && [ "$arg" != "--clean" ] && [ "$arg" != "-c" ]; then
+    elif [ -z "$NODE_HOSTNAME" ] && [[ "$arg" != -* ]]; then
+        # First non-flag argument is hostname
         NODE_HOSTNAME="$arg"
+    else
+        # Collect other arguments to pass to python script
+        EXTRA_ARGS+=("$arg")
     fi
 done
 
@@ -56,7 +62,9 @@ if [ "$CLEAN_DATA" = true ]; then
 fi
 
 # Activate virtual environment if it exists
-if [ -d "venv" ]; then
+if [ -d ".venv" ]; then
+    source .venv/bin/activate
+elif [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
@@ -162,16 +170,29 @@ echo "Starting MiniChain node..."
 echo "=========================================="
 echo ""
 
+# Determine python executable
+PYTHON="python3"
+if [ -d ".venv" ]; then
+    PYTHON=".venv/bin/python3"
+elif [ -d "venv" ]; then
+    PYTHON="venv/bin/python3"
+fi
+
+
+
+
 if [ -n "$CONFIG_FILE" ]; then
-    python3 src/main.py \
+    $PYTHON src/main.py \
         --config "$CONFIG_FILE" \
         --node-id "$NODE_ID" \
         --port "$PORT" \
-        --peers "$PEERS_LIST"
+        --peers "$PEERS_LIST" \
+        "${EXTRA_ARGS[@]}"
 else
-    python3 src/main.py \
+    $PYTHON src/main.py \
         --node-id "$NODE_ID" \
         --port "$PORT" \
-        --peers "$PEERS_LIST"
+        --peers "$PEERS_LIST" \
+        "${EXTRA_ARGS[@]}"
 fi
 
