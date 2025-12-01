@@ -1,0 +1,25 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Expose API port
+EXPOSE 8080
+
+# Environment (override via compose/env)
+ENV NODE_HOSTNAME="svm-11.cs.helsinki.fi" \
+    API_PORT=8080 \
+    CLEAN="false"
+
+# Default command runs the node with API enabled
+CMD ["bash", "-lc", "./start.sh \"$NODE_HOSTNAME\" --api-port \"$API_PORT\" $( [ \"$CLEAN\" = \"true\" ] && echo --clean ) "]
