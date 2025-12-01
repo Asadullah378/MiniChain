@@ -1,8 +1,9 @@
 import React from 'react';
-import { LayoutDashboard, Link, Layers, Send, Activity } from 'lucide-react';
+import { LayoutDashboard, Layers, Send, Activity, X } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import clsx from 'clsx';
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Layers, label: 'Blockchain', path: '/blocks' },
@@ -10,36 +11,68 @@ const Sidebar = () => {
     ];
 
     return (
-        <div className="w-64 h-screen bg-gray-900 text-white border-r border-gray-800 flex flex-col">
-            <div className="p-6 flex items-center space-x-3 border-b border-gray-800">
-                <Activity className="w-8 h-8 text-blue-500" />
-                <span className="text-xl font-bold tracking-wider">MiniChain</span>
-            </div>
+        <>
+            {/* Mobile Overlay */}
+            <div
+                className={clsx(
+                    "fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300",
+                    isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+                )}
+                onClick={onClose}
+            />
 
-            <nav className="flex-1 p-4 space-y-2">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.path}
-                        to={item.path}
-                        className={({ isActive }) =>
-                            `flex items-center space-x-3 px-4 py-3 rounded-lg transition-all duration-200 ${isActive
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                                : 'text-gray-400 hover:bg-gray-800 hover:text-white'
-                            }`
-                        }
-                    >
-                        <item.icon className="w-5 h-5" />
-                        <span className="font-medium">{item.label}</span>
-                    </NavLink>
-                ))}
-            </nav>
+            {/* Sidebar Container */}
+            <div className={clsx(
+                "fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-950 text-white border-r border-slate-800 flex flex-col transition-transform duration-300 transform md:translate-x-0",
+                isOpen ? "translate-x-0" : "-translate-x-full"
+            )}>
+                <div className="p-6 flex items-center justify-between border-b border-slate-800">
+                    <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-blue-600/20 rounded-lg">
+                            <Activity className="w-6 h-6 text-blue-500" />
+                        </div>
+                        <span className="text-xl font-bold tracking-wider bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                            MiniChain
+                        </span>
+                    </div>
+                    <button onClick={onClose} className="md:hidden text-slate-400 hover:text-white">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
 
-            <div className="p-4 border-t border-gray-800">
-                <div className="text-xs text-gray-500 text-center">
-                    MiniChain Node Visualization
+                <nav className="flex-1 p-4 space-y-2">
+                    {navItems.map((item) => (
+                        <NavLink
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => window.innerWidth < 768 && onClose()}
+                            className={({ isActive }) =>
+                                clsx(
+                                    "flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                                    isActive
+                                        ? "bg-blue-600/10 text-blue-400 border border-blue-600/20 shadow-[0_0_20px_rgba(37,99,235,0.1)]"
+                                        : "text-slate-400 hover:bg-slate-900 hover:text-white hover:translate-x-1"
+                                )
+                            }
+                        >
+                            <item.icon className={clsx("w-5 h-5 transition-colors", ({ isActive }) => isActive ? "text-blue-400" : "group-hover:text-blue-400")} />
+                            <span className="font-medium">{item.label}</span>
+                        </NavLink>
+                    ))}
+                </nav>
+
+                <div className="p-4 border-t border-slate-800">
+                    <div className="px-4 py-3 bg-slate-900/50 rounded-xl border border-slate-800">
+                        <div className="text-xs text-slate-500 text-center font-medium">
+                            Node Visualization
+                        </div>
+                        <div className="text-[10px] text-slate-600 text-center mt-1">
+                            v1.0.0
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 
