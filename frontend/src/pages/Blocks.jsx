@@ -93,7 +93,7 @@ const Blocks = () => {
                 <p className="text-slate-400 mt-2 text-lg">Immutable ledger history</p>
             </div>
 
-            <div className="space-y-4 max-w-4xl mx-auto pb-12">
+            <div className="space-y-4 w-full max-w-full pb-12">
                 <AnimatePresence>
                     {blocks.map((block, index) => (
                         <BlockCard
