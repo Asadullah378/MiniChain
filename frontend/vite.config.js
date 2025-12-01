@@ -8,11 +8,11 @@ export default defineConfig({
     host: true,
     port: 5173,
     proxy: {
-      '/status': 'http://localhost:8080',
-      '/blocks': 'http://localhost:8080',
-      '/mempool': 'http://localhost:8080',
-      '/submit': 'http://localhost:8080',
-      '/debug': 'http://localhost:8080',
+      '/status': 'http://localhost:8000',
+      '/blocks': 'http://localhost:8000',
+      '/mempool': 'http://localhost:8000',
+      '/submit': 'http://localhost:8000',
+      '/debug': 'http://localhost:8000',
     },
   },
 });
