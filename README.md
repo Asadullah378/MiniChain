@@ -451,3 +451,31 @@ Simulate a consensus timeout (e.g., to force a view change).
 ```bash
 curl -X POST http://localhost:8080/debug/consensus/timeout
 ```
+
+## Troubleshooting
+
+### API Not Working
+If you cannot access the API:
+1.  **Check if node is running**:
+    ```bash
+    ps aux | grep main.py
+    ```
+2.  **Check if port is listening**:
+    ```bash
+    netstat -tulpn | grep 8080
+    ```
+3.  **Check logs**:
+    ```bash
+    tail -f minichain.log
+    ```
+4.  **Missing Dependencies**:
+    If you see `ModuleNotFoundError`, run:
+    ```bash
+    ./setup.sh
+    ```
+
+### Connection Refused (502)
+If accessing from a local machine via SSH tunnel:
+- Ensure the node is running on the **remote** machine.
+- Ensure the tunnel is correctly set up: `ssh -L 8080:localhost:8080 user@host`
+- Verify the node is listening on `0.0.0.0` or `localhost` (default is `0.0.0.0`).
