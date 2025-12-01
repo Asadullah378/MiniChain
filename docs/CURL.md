@@ -13,6 +13,55 @@ Ensure the node is running with the API enabled:
 
 All examples below assume the API is running at `http://localhost:8080`.
 
+## Remote Access
+
+To access the API from your local machine (e.g., laptop) while the node runs on a remote server (e.g., `svm-11`):
+
+1.  **SSH with Port Forwarding**:
+    ```bash
+    ssh -L 8080:localhost:8080 user@svm-11.cs.helsinki.fi
+    ```
+2.  **Start Node on Remote**:
+    ```bash
+    ./start.sh svm-11.cs.helsinki.fi --api-port 8080
+    ```
+3.  **Access Locally**:
+    Open `http://localhost:8080/status` in your local browser or use `curl`.
+
+## Multi-Node Setup
+
+To run a full network, you need to start nodes on different machines. Here is an example workflow using `melkki` as a jump host:
+
+### 1. Start Node 1 (svm-11)
+```bash
+# Terminal 1 (Local)
+ssh -L 8080:localhost:8080 -J user@melkki.cs.helsinki.fi user@svm-11.cs.helsinki.fi
+
+# On svm-11
+cd MiniChain
+./start.sh svm-11.cs.helsinki.fi --api-port 8080
+```
+
+### 2. Start Node 2 (svm-11-2)
+```bash
+# Terminal 2 (Local)
+ssh -J user@melkki.cs.helsinki.fi user@svm-11-2.cs.helsinki.fi
+
+# On svm-11-2
+cd MiniChain
+./start.sh svm-11-2.cs.helsinki.fi
+```
+
+### 3. Start Node 3 (svm-11-3)
+```bash
+# Terminal 3 (Local)
+ssh -J user@melkki.cs.helsinki.fi user@svm-11-3.cs.helsinki.fi
+
+# On svm-11-3
+cd MiniChain
+./start.sh svm-11-3.cs.helsinki.fi
+```
+
 ## Endpoint Summary
 
 | Method | Endpoint | Description |
