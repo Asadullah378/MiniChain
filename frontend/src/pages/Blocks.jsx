@@ -18,7 +18,7 @@ const BlockCard = ({ block, index }) => (
                 </div>
                 <div>
                     <h3 className="text-lg font-bold text-white">Block #{block.height}</h3>
-                    <p className="text-xs text-gray-500 font-mono">{block.block_hash.substring(0, 16)}...</p>
+                    <p className="text-xs text-gray-500 font-mono">{block.hash.substring(0, 16)}...</p>
                 </div>
             </div>
             <div className="text-right">
@@ -65,7 +65,7 @@ const Blocks = () => {
             <div className="grid grid-cols-1 gap-4">
                 <AnimatePresence>
                     {blocks.map((block, index) => (
-                        <BlockCard key={block.block_hash} block={block} index={index} />
+                        <BlockCard key={block.hash} block={block} index={index} />
                     ))}
                 </AnimatePresence>
             </div>
