@@ -96,6 +96,38 @@ This will remove:
 - All blockchain data (`data/` directory)
 - All log files (`minichain.log`)
 
+### 4. Run Frontend (Vite React)
+
+To run the dashboard UI during development on a VM and access it from your local machine:
+
+```bash
+cd frontend
+npm install
+# Bind to 0.0.0.0 so it's reachable via VM IP
+npm run dev -- --host
+```
+
+Access from your local browser:
+
+- Direct (bridged network, firewall open): `http://<vm_ip>:5173/`
+- SSH tunnel (reliable fallback):
+  ```bash
+  ssh -L 5173:localhost:5173 -L 8000:localhost:8000 <user>@<vm_ip>
+  ```
+  Start frontend with API pointing to localhost (to match the tunnel):
+  ```bash
+  VITE_API_URL="http://localhost:8000" npm run dev -- --host
+  ```
+  Open `http://localhost:5173` and API `http://localhost:8000/status`.
+
+Frontend API base URL:
+
+- Configured via `VITE_API_URL`. If the API runs on the VM at `8000`, you can start dev with:
+  ```bash
+  VITE_API_URL="http://<vm_ip>:8000" npm run dev -- --host
+  ```
+  The client code reads `VITE_API_URL` or falls back to the page origin.
+
 ## Configuration
 
 ### `config.yaml` - Blockchain Settings
@@ -118,6 +150,14 @@ logging:
 ```
 
 **Note**: This file contains only blockchain settings. Node-specific settings (node_id, peers) are auto-detected from `peers.txt`.
+
+### API Port
+
+The HTTP API binds to `0.0.0.0` and defaults to the port derived from `peers.txt` (falls back to `8000`). You can explicitly set an API port when starting:
+
+```bash
+./start.sh <hostname> --api-port 8080
+```
 
 ### `peers.txt` - Network Configuration
 
@@ -375,6 +415,8 @@ Tests live under `tests/` and can be filtered (e.g., `pytest tests/test_poa.py -
 - `PRD.md` – product requirements, personas, milestones, and risks.
 - `TODO.md` – backlog aligned with the PRD milestones.
 - `PYTEST.md` – detailed instructions for running/extending the automated test suite.
+- `docs/CURL.md` – curl examples and SSH tunneling tips (`--api-port` examples).
+- `DOCKER.md` – step-by-step Docker and Compose deployment guide.
 
 Keep these documents in sync when features land so reviewers can trace code back to the design intent.
 
@@ -403,21 +445,25 @@ python3 src/main.py --node-id <id> --api-port 8080
 ### Standard Endpoints
 
 #### Check Node Status
+
 ```bash
 curl http://localhost:8080/status
 ```
 
 #### List Blocks
+
 ```bash
 curl "http://localhost:8080/blocks?limit=5"
 ```
 
 #### Get Block Details
+
 ```bash
 curl http://localhost:8080/blocks/0
 ```
 
 #### Submit Transaction
+
 ```bash
 curl -X POST http://localhost:8080/submit \
   -H "Content-Type: application/json" \
@@ -429,33 +475,129 @@ curl -X POST http://localhost:8080/submit \
 These endpoints are for testing edge cases and simulating network conditions.
 
 #### Clear Mempool
+
 Remove all pending transactions from the mempool.
+
 ```bash
 curl -X POST http://localhost:8080/debug/mempool/clear
 ```
 
 #### Simulate Network Partition
+
 Disconnect from all peers to simulate a network partition.
+
 ```bash
 curl -X POST http://localhost:8080/debug/network/disconnect
 ```
 
 #### Reconnect Network
+
 Reconnect to peers after a partition.
+
 ```bash
 curl -X POST http://localhost:8080/debug/network/reconnect
 ```
 
 #### Trigger Consensus Timeout
+
 Simulate a consensus timeout (e.g., to force a view change).
+
 ```bash
 curl -X POST http://localhost:8080/debug/consensus/timeout
 ```
 
+## Docker (Quick Start)
+
+You can run the API and frontend via Docker Compose. See `DOCKER.md` for full details.
+
+```bash
+# From repo root
+VITE_API_URL="http://localhost:8080" docker compose up --build
+# Frontend: http://localhost:5173
+# API:      http://localhost:8080/status
+```
+
+For Internet deployment, use a public VM with a reverse proxy and TLS; `DOCKER.md` includes guidance and an optional Nginx setup.
+
+## Remote Access (UH VPN + SSH Gateway)
+
+Recommended setup using a VPN and SSH jump host to reach `svm-11*` machines from your laptop.
+
+1. Connect to UH VPN:
+
+- Guide: https://helpdesk.it.helsinki.fi/en/logging-and-connections/remote-access-university-services
+
+2. SSH with local port forwarding via gateway:
+
+```bash
+# Single command using jump host (-J)
+ssh -L 5173:localhost:5173 -L 8000:localhost:8000 \
+  -J <user>@melkki.cs.helsinki.fi <user>@svm-11.cs.helsinki.fi
+```
+
+Notes:
+
+- `-J` uses the gateway as a jump host.
+- You can replace `melkki` with `melkinkari` or `melkinpaasi`.
+- Manual chaining also works (SSH to gateway first, then to `svm-11`).
+
+3. On `svm-11`, start backend + frontend:
+
+```bash
+cd ~/MiniChain
+./start.sh svm-11.cs.helsinki.fi --api-port 8000
+cd frontend
+VITE_API_URL="http://localhost:8000" npm run dev -- --host
+```
+
+4. On your local machine, open:
+
+- Frontend: `http://localhost:5173`
+- API health: `http://localhost:8000/status`
+
+This avoids firewall issues by tunneling through SSH.
+
+### Direct Access inside UH network
+
+If you’re already on the UH network and want to access directly:
+
+1. Ensure Vite binds to `0.0.0.0` (see `frontend/vite.config.js` with `server.host: true`).
+
+2. Start frontend pointing at the VM IP:
+
+```bash
+VITE_API_URL="http://128.214.11.91:8000" npm run dev -- --host
+```
+
+3. Open `http://128.214.11.91:5173/` from your host.
+
+If it doesn’t load:
+
+- Open ports on the VM firewall:
+
+```bash
+sudo ufw allow 5173/tcp
+sudo ufw allow 8000/tcp
+sudo ufw status
+```
+
+- Check listeners:
+
+```bash
+ss -ltnp | grep 5173
+ss -ltnp | grep 8000
+```
+
+- Institutional firewall may still block; fall back to the SSH tunnel method above.
+
+If you run into errors with the jump host command, share the exact error and we’ll adjust (e.g., `ProxyJump` in `~/.ssh/config`, or `-W`/`-J` alternatives).
+
 ## Troubleshooting
 
 ### API Not Working
+
 If you cannot access the API:
+
 1.  **Check if node is running**:
     ```bash
     ps aux | grep main.py
@@ -475,7 +617,9 @@ If you cannot access the API:
     ```
 
 ### Connection Refused (502)
+
 If accessing from a local machine via SSH tunnel:
+
 - Ensure the node is running on the **remote** machine.
 - Ensure the tunnel is correctly set up: `ssh -L 8080:localhost:8080 user@host`
 - Verify the node is listening on `0.0.0.0` or `localhost` (default is `0.0.0.0`).
