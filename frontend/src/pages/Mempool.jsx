@@ -42,15 +42,15 @@ const Mempool = () => {
 
                 <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
                     <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-                        <span className="font-medium text-gray-300">Pending Queue ({mempool.size})</span>
+                        <span className="font-medium text-gray-300">Pending Queue ({mempool.length})</span>
                         <RefreshCw className="w-4 h-4 text-gray-500 animate-spin" />
                     </div>
                     <div className="divide-y divide-gray-800">
                         <AnimatePresence>
-                            {mempool.transactions.length === 0 ? (
+                            {mempool.length === 0 ? (
                                 <div className="p-8 text-center text-gray-500">No pending transactions</div>
                             ) : (
-                                mempool.transactions.map((tx) => (
+                                mempool.map((tx) => (
                                     <motion.div
                                         key={tx.id}
                                         initial={{ opacity: 0, height: 0 }}
