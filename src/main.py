@@ -127,6 +127,8 @@ def main():
             cli.stop()
     except Exception as e:
         logger.error(f"Fatal error: {e}", exc_info=True)
+        # Also print to stderr so user sees it even if console logging is disabled
+        print(f"Fatal error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
