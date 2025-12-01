@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 const Mempool = () => {
     const { data: mempool, loading, error } = usePoll(getMempool, 2000);
-    const [formData, setFormData] = useState({ recipient: '', amount: '' });
+    const [formData, setFormData] = useState({ sender: '', recipient: '', amount: '' });
     const [submitting, setSubmitting] = useState(false);
     const [submitStatus, setSubmitStatus] = useState(null);
 
@@ -17,12 +17,12 @@ const Mempool = () => {
         setSubmitStatus(null);
         try {
             await submitTransaction({
-                sender: 'frontend-user',
+                sender: formData.sender,
                 recipient: formData.recipient,
                 amount: Number(formData.amount),
             });
             setSubmitStatus({ type: 'success', message: 'Transaction submitted successfully!' });
-            setFormData({ recipient: '', amount: '' });
+            setFormData({ sender: '', recipient: '', amount: '' });
             setTimeout(() => setSubmitStatus(null), 3000);
         } catch (err) {
             setSubmitStatus({ type: 'error', message: 'Failed to submit transaction. It might be a duplicate.' });
@@ -118,6 +118,18 @@ const Mempool = () => {
                     </h2>
 
                     <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-400 mb-1.5">Sender Address</label>
+                            <input
+                                type="text"
+                                required
+                                value={formData.sender}
+                                onChange={(e) => setFormData({ ...formData, sender: e.target.value })}
+                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                                placeholder="e.g. alice"
+                            />
+                        </div>
+
                         <div>
                             <label className="block text-sm font-medium text-slate-400 mb-1.5">Recipient Address</label>
                             <input
