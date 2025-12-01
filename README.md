@@ -389,3 +389,65 @@ The codebase is designed to be:
 ## License
 
 [Your License Here]
+
+## API Reference
+
+MiniChain includes an HTTP API for interacting with the node and debugging. To enable it, start the node with the `--api-port` flag:
+
+```bash
+./start.sh <hostname> --api-port 8080
+# OR
+python3 src/main.py --node-id <id> --api-port 8080
+```
+
+### Standard Endpoints
+
+#### Check Node Status
+```bash
+curl http://localhost:8080/status
+```
+
+#### List Blocks
+```bash
+curl "http://localhost:8080/blocks?limit=5"
+```
+
+#### Get Block Details
+```bash
+curl http://localhost:8080/blocks/0
+```
+
+#### Submit Transaction
+```bash
+curl -X POST http://localhost:8080/submit \
+  -H "Content-Type: application/json" \
+  -d '{"sender": "alice", "recipient": "bob", "amount": 10.5}'
+```
+
+### Debug Endpoints
+
+These endpoints are for testing edge cases and simulating network conditions.
+
+#### Clear Mempool
+Remove all pending transactions from the mempool.
+```bash
+curl -X POST http://localhost:8080/debug/mempool/clear
+```
+
+#### Simulate Network Partition
+Disconnect from all peers to simulate a network partition.
+```bash
+curl -X POST http://localhost:8080/debug/network/disconnect
+```
+
+#### Reconnect Network
+Reconnect to peers after a partition.
+```bash
+curl -X POST http://localhost:8080/debug/network/reconnect
+```
+
+#### Trigger Consensus Timeout
+Simulate a consensus timeout (e.g., to force a view change).
+```bash
+curl -X POST http://localhost:8080/debug/consensus/timeout
+```
