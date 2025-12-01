@@ -48,6 +48,11 @@ def main():
         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
         help='Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)'
     )
+    parser.add_argument(
+        '--api-port',
+        type=int,
+        help='Port to run HTTP API server on'
+    )
     
     args = parser.parse_args()
     
@@ -94,6 +99,13 @@ def main():
     try:
         node = Node(config, disable_console_logging=cli_enabled, log_level=log_level)
         
+        # Start API server if requested
+        api_server = None
+        if args.api_port:
+            from src.api.server import start_api_server
+            logger.info(f"Starting API server on port {args.api_port}")
+            api_server = start_api_server(node, args.api_port)
+        
         # Start CLI in interactive mode (unless disabled)
         cli = None
         if cli_enabled:
@@ -106,6 +118,7 @@ def main():
         # Stop CLI when node stops
         if cli:
             cli.stop()
+            
     except KeyboardInterrupt:
         logger.info("Shutting down node...")
         if 'node' in locals():
