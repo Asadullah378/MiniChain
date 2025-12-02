@@ -9,6 +9,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Layers, label: 'Blockchain', path: '/blocks' },
         { icon: Send, label: 'Mempool', path: '/mempool' },
+        { icon: Send, label: 'Send Transaction', path: '/send-transaction' },
     ];
 
     return (

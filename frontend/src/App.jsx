@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Blocks from './pages/Blocks';
 import Mempool from './pages/Mempool';
+import SendTransaction from './pages/SendTransaction';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
           <Route index element={<Dashboard />} />
           <Route path="blocks" element={<Blocks />} />
           <Route path="mempool" element={<Mempool />} />
+          <Route path="send-transaction" element={<SendTransaction />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
