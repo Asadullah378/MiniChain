@@ -9,3 +9,8 @@ colorlog>=6.8.0  # For colored logging
 # Testing
 pytest>=8.0.0
 
+
+# API
+fastapi>=0.100.0
+uvicorn>=0.20.0
+httpx>=0.24.0
