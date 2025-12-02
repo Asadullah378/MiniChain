@@ -1,46 +1,65 @@
 # MiniChain TODO
 
-Backlog aligned with `PRD.md` (v1.0 – Nov 26, 2025). Update statuses at the end of every sprint/demo rehearsal.
+## ✅ Completed
 
-## ✅ Completed Foundations
+- [x] **Core P2P Transport**: Listener, outbound connectors, HELLO handshake.
+- [x] **Consensus Engine**: Round-robin PoA pipeline (propose → ACK → commit).
+- [x] **Persistence**: On-disk chain persistence + deterministic genesis validation.
+- [x] **Basic API**: FastAPI server with status, blocks, and mempool endpoints.
+- [x] **Frontend Dashboard**: React-based dashboard with real-time status polling.
+- [x] **Transaction Submission**: Dedicated "Send Transaction" page and flow.
 
-- [x] P2P transport (listener, outbound connectors, HELLO handshake)
-- [x] Round-robin PoA pipeline (propose → ACK → commit)
-- [x] On-disk chain persistence + deterministic genesis validation
+---
 
-## 🎯 Milestones & Demos
+## 🚀 Backend Improvements
 
-- [ ] **M3 – Fault Handling & Sync (Week 7)**
-  - [ ] Implement leader timeout + VIEWCHANGE path in `Node._check_timeouts`
-  - [ ] Demonstrate node restart catching up via GETHEADERS/GETBLOCKS
-- [ ] **M4 – Observability & Polish (Week 9)**
-  - [ ] Metrics/health endpoint (HTTP or CLI) exposing block time + mempool size
-  - [ ] Finalize demo script + multi-node walkthrough video
+### API & Server (`src/api/server.py`)
+- [ ] **Structured Error Handling**: Replace generic `HTTPException` with a custom error handler to return consistent JSON error responses (e.g., `{"error": "code", "message": "..."}`).
+- [ ] **Remove Global State**: Refactor `server.py` to avoid using the global `node` variable. Pass the node instance via dependency injection or app state.
+- [ ] **Disable Debug Endpoints**: specific `/debug/*` endpoints should be disabled in production or protected by a flag/auth.
+- [ ] **Pagination**: Implement proper pagination for `/blocks` and `/mempool` (currently hardcoded limit=10).
+- [ ] **Input Validation**: Enhance `TransactionModel` validation (e.g., prevent negative amounts, enforce address format).
 
-## 🔐 Consensus & Protocol Hardening
+### Core Logic
+- [ ] **Decimal Precision**: Stop using `float` for transaction amounts. Use `Decimal` or integer subunits (satoshis) to avoid floating-point errors.
+- [ ] **Graceful Shutdown**: Improve signal handling to ensure the API server and Node threads shut down cleanly.
+- [ ] **Configuration**: Add validation for `config.yaml` loading.
 
-- [ ] Sign and verify ACK/COMMIT messages using `src/common/crypto.KeyPair`
-- [ ] Enforce proposer schedule validation on follower ACK path (log + reject mismatches)
-- [ ] Add quorum/timeout counters to logs for auditability
+### Testing
+- [ ] **Integration Tests**: Add real integration tests that spin up a node and test API endpoints without mocking internal components.
+- [ ] **Unit Tests**: Increase coverage for `consensus` and `p2p` modules.
 
-## 🌐 Networking & Sync
+---
 
-- [ ] Finish header/block sync (`send_headers`, `send_block`, HEADERS/BLOCK handlers)
-- [ ] Retry/backoff strategy for outbound connections + message sends
-- [ ] Detect peer list divergence at startup (compare `peers.txt` signatures/hash)
+## 🎨 Frontend Improvements
 
-## 🧪 Reliability & Testing
+### Architecture & State
+- [ ] **Remove Polling**: Replace `setInterval` polling in `Dashboard.jsx` (and others) with **WebSockets** or **Server-Sent Events (SSE)** for real-time updates.
+- [ ] **Data Fetching**: Adopt a library like **TanStack Query (React Query)** or **SWR** for better caching, loading states, and error handling.
+- [ ] **Type Safety**: Consider migrating to **TypeScript** for better type safety and developer experience.
 
-- [ ] Node restart during in-flight commit (ensure idempotent add_block)
-- [ ] Simulate network partition / delayed ACK quorum handling
-- [ ] Stress test mempool when `MAX_TX_PER_BLOCK` << inbound rate (starvation prevention)
-- [ ] Document expected recovery time after forced leader crash
+### UI/UX
+- [ ] **Node Configuration**: Add a settings page to configure the API URL dynamically (instead of just `.env`).
+- [ ] **Better Error Feedback**: Improve error toasts/alerts when transactions fail or the node is unreachable.
+- [ ] **Transaction Details**: Add a dedicated page to view transaction details (by ID).
+- [ ] **Mobile Responsiveness**: Further polish mobile views for tables and complex dashboards.
 
-## 📚 Documentation & Tooling
+---
 
-- [ ] Link `docs/ARCHITECTURE.md` and `PRD.md` from `README.md`
-- [ ] Author quick-start walkthrough for three-node deployment (include `start.sh` examples)
-- [ ] Troubleshooting matrix for networking/consensus issues (timeouts, hostname mismatches)
-- [ ] Add `make` or shell helper to tail logs from all nodes simultaneously (optional)
+## 🔐 Protocol & Consensus (Backlog)
 
-_Use checkbox IDs in commits (e.g., "TODO: completed VIEWCHANGE timeout"), and keep sections in sync with PRD milestones._
+*From previous roadmap*
+
+- [ ] **M3 – Fault Handling & Sync**: Implement leader timeout + VIEWCHANGE path.
+- [ ] **M4 – Observability**: Metrics/health endpoint exposing block time + mempool size.
+- [ ] **Signatures**: Sign and verify ACK/COMMIT messages using `src/common/crypto.KeyPair`.
+- [ ] **Sync**: Finish header/block sync (`send_headers`, `send_block`).
+- [ ] **Network**: Retry/backoff strategy for outbound connections.
+
+---
+
+## 🛠 DevOps & Tooling
+
+- [ ] **Docker**: Optimize `Dockerfile.api` for smaller image size (multi-stage build).
+- [ ] **CI/CD**: Add GitHub Actions workflow for running tests and linting.
+- [ ] **Linting**: Enforce `flake8` or `ruff` for Python and `eslint` for JavaScript.
