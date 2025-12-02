@@ -10,14 +10,14 @@ const StatCard = ({ icon: Icon, label, value, color, delay }) => (
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: delay * 0.1 }}
-        className="relative overflow-hidden bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-6 rounded-2xl hover:border-slate-700 transition-all duration-300 group"
+        className="relative overflow-hidden bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200 dark:border-slate-800 p-6 rounded-2xl hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-300 group"
     >
         <div className={clsx("absolute top-0 right-0 p-20 rounded-full blur-3xl opacity-5 -translate-y-1/2 translate-x-1/2 transition-opacity group-hover:opacity-10", color.bg)} />
 
         <div className="flex items-start justify-between relative z-10">
             <div>
-                <p className="text-slate-400 text-sm font-medium tracking-wide uppercase">{label}</p>
-                <p className="text-3xl font-bold text-white mt-2 tracking-tight">{value}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm font-medium tracking-wide uppercase">{label}</p>
+                <p className="text-3xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">{value}</p>
             </div>
             <div className={clsx("p-3 rounded-xl bg-opacity-10 ring-1 ring-inset", color.bg, color.text, color.ring)}>
                 <Icon className="w-6 h-6" />
@@ -30,7 +30,7 @@ const Dashboard = () => {
     const { data: status, loading, error } = usePoll(getStatus, 2000);
 
     if (loading && !status) return (
-        <div className="flex items-center justify-center h-64 text-slate-400 animate-pulse">
+        <div className="flex items-center justify-center h-64 text-slate-500 dark:text-slate-400 animate-pulse">
             Connecting to node...
         </div>
     );
@@ -46,16 +46,16 @@ const Dashboard = () => {
         <div className="space-y-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-4xl font-bold text-white tracking-tight">
+                    <h1 className="text-4xl font-bold text-slate-900 dark:text-white tracking-tight">
                         Node Status
                     </h1>
-                    <p className="text-slate-400 mt-2 text-lg">
+                    <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg">
                         Real-time overview of your distributed node
                     </p>
                 </div>
-                <div className="px-4 py-2 bg-slate-900 rounded-full border border-slate-800 flex items-center space-x-2">
+                <div className="px-4 py-2 bg-white dark:bg-slate-900 rounded-full border border-slate-200 dark:border-slate-800 flex items-center space-x-2">
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium text-slate-300">System Operational</span>
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">System Operational</span>
                 </div>
             </div>
 
@@ -94,12 +94,12 @@ const Dashboard = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
-                className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl p-8 relative overflow-hidden"
+                className="bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl border border-slate-200 dark:border-slate-800 rounded-2xl p-8 relative overflow-hidden"
             >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
 
                 <div className="relative z-10">
-                    <h2 className="text-xl font-bold text-white mb-6 flex items-center space-x-2">
+                    <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-6 flex items-center space-x-2">
                         <ShieldCheck className="w-6 h-6 text-blue-400" />
                         <span>Consensus Status</span>
                     </h2>
@@ -111,7 +111,7 @@ const Dashboard = () => {
                                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
                                     {status.leader ? status.leader[0].toUpperCase() : '?'}
                                 </div>
-                                <span className="text-xl font-mono text-white">{status.leader || 'None'}</span>
+                                <span className="text-xl font-mono text-slate-900 dark:text-white">{status.leader || 'None'}</span>
                             </div>
                         </div>
 
@@ -122,7 +122,7 @@ const Dashboard = () => {
                                     "px-4 py-2 rounded-lg font-bold text-sm border",
                                     status.leader === status.node_id
                                         ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                                        : "bg-slate-800 text-slate-400 border-slate-700"
+                                        : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
                                 )}>
                                     {status.leader === status.node_id ? 'LEADER' : 'FOLLOWER'}
                                 </span>
