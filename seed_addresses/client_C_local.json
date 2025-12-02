@@ -1,4 +1,0 @@
-{
-    "client": "localhost:5002",
-    "peers": ["localhost:5000", "localhost:5001"]
-}

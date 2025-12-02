@@ -1,0 +1,27 @@
+# MiniChain Blockchain Configuration
+# This file contains blockchain and consensus settings
+# Node-specific settings (node_id, peers) are auto-detected by start.sh
+
+consensus:
+  type: "poa_round_robin"
+  block_interval: 30  # seconds between block proposals
+  proposal_timeout: 10  # seconds to wait for ACKs before timeout
+  quorum_size: 2  # minimum ACKs needed (for 3 nodes: 2/3)
+
+blockchain:
+  genesis_block: true
+  max_block_size: 100  # max transactions per block
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "minichain.log"
+  console: true
+
+network:
+  listen_address: "0.0.0.0"
+  connection_timeout: 5
+  heartbeat_interval: 10
+
+node:
+  data_dir: "data"
+
