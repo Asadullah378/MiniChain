@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Layers, Send, Activity, X } from 'lucide-react';
+import { LayoutDashboard, Layers, Send, Activity, X, Clock } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import ThemeToggle from './ThemeToggle';
@@ -8,7 +8,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Layers, label: 'Blockchain', path: '/blocks' },
-        { icon: Send, label: 'Mempool', path: '/mempool' },
+        { icon: Clock, label: 'Mempool', path: '/mempool' },
         { icon: Send, label: 'Send Transaction', path: '/send-transaction' },
     ];
 

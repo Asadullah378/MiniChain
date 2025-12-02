@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, RefreshCw, ArrowRight, Wallet } from 'lucide-react';
+import { RefreshCw, ArrowRight, Clock } from 'lucide-react';
 import { getMempool } from '../api/client';
 import usePoll from '../hooks/usePoll';
 import clsx from 'clsx';
@@ -25,7 +25,7 @@ const Mempool = () => {
                         <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-amber-500/10 rounded-lg">
-                                    <Wallet className="w-5 h-5 text-amber-500" />
+                                    <Clock className="w-5 h-5 text-amber-500" />
                                 </div>
                                 <span className="font-bold text-slate-900 dark:text-slate-200">Pending Queue</span>
                                 <span className="px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-mono">
@@ -44,7 +44,7 @@ const Mempool = () => {
                                         className="p-12 text-center"
                                     >
                                         <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                                            <Send className="w-8 h-8 text-slate-400 dark:text-slate-600" />
+                                            <Clock className="w-8 h-8 text-slate-400 dark:text-slate-600" />
                                         </div>
                                         <h3 className="text-slate-400 dark:text-slate-300 font-medium">No pending transactions</h3>
                                         <p className="text-slate-500 text-sm mt-1">New transactions will appear here</p>
