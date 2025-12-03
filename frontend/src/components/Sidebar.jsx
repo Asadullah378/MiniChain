@@ -3,8 +3,10 @@ import { LayoutDashboard, Layers, Send, Activity, X, Clock } from 'lucide-react'
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
 import ThemeToggle from './ThemeToggle';
+import { useNode } from '../context/NodeContext';
 
 const Sidebar = ({ isOpen, onClose }) => {
+    const { selectedNode, nodes, changeNode } = useNode();
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Layers, label: 'Blockchain', path: '/blocks' },
@@ -63,16 +65,32 @@ const Sidebar = ({ isOpen, onClose }) => {
                     ))}
                 </nav>
 
-                <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2">
-                    <div className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <div className="text-xs text-slate-500 text-center font-medium">
-                            Node Visualization
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-4">
+                    <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1">
+                            <label className="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5 block uppercase tracking-wider">
+                                Connected Node
+                            </label>
+                            <select
+                                value={selectedNode.id}
+                                onChange={(e) => changeNode(e.target.value)}
+                                className="w-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-2.5 transition-colors cursor-pointer outline-none"
+                            >
+                                {nodes.map((node) => (
+                                    <option key={node.id} value={node.id}>
+                                        {node.name}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="text-[10px] text-slate-600 text-center mt-1">
-                            v1.0.0
+                        <div className="self-end mb-1">
+                            <ThemeToggle />
                         </div>
                     </div>
-                    <ThemeToggle />
+
+                    <div className="text-[10px] text-slate-400 text-center font-mono">
+                        {selectedNode.url}
+                    </div>
                 </div>
             </div>
         </>
