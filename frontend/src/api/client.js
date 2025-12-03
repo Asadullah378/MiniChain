@@ -10,6 +10,10 @@ const api = axios.create({
   },
 });
 
+export const setApiBaseUrl = (url) => {
+  api.defaults.baseURL = url;
+};
+
 export const getStatus = async () => {
   try {
     const response = await api.get("/status");
