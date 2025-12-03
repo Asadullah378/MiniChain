@@ -33,16 +33,9 @@
 
 ## 🎨 Frontend Improvements
 
-### Architecture & State
-- [ ] **Remove Polling**: Replace `setInterval` polling in `Dashboard.jsx` (and others) with **WebSockets** or **Server-Sent Events (SSE)** for real-time updates.
-- [ ] **Data Fetching**: Adopt a library like **TanStack Query (React Query)** or **SWR** for better caching, loading states, and error handling.
-- [ ] **Type Safety**: Consider migrating to **TypeScript** for better type safety and developer experience.
-
 ### UI/UX
-- [ ] **Node Configuration**: Add a settings page to configure the API URL dynamically (instead of just `.env`).
-- [ ] **Better Error Feedback**: Improve error toasts/alerts when transactions fail or the node is unreachable.
-- [ ] **Transaction Details**: Add a dedicated page to view transaction details (by ID).
-- [ ] **Mobile Responsiveness**: Further polish mobile views for tables and complex dashboards.
+
+- [x] **Transaction Details**: Add a dedicated page to view transaction details (by ID).
 
 ---
 
