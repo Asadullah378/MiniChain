@@ -78,7 +78,7 @@ const Dashboard = () => {
                     delay={2}
                     icon={Users}
                     label="Peers Connected"
-                    value={status.peers_count}
+                    value={status.peers}
                     color={{ bg: 'bg-violet-500', text: 'text-violet-400', ring: 'ring-violet-500/20' }}
                 />
                 <StatCard
