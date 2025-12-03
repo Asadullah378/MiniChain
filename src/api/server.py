@@ -136,6 +136,40 @@ async def submit_transaction(tx_data: TransactionModel):
     else:
         raise HTTPException(status_code=400, detail="Transaction rejected (duplicate?)")
 
+@app.get("/transactions/{tx_id}")
+async def get_transaction_details(tx_id: str):
+    if not node:
+        raise HTTPException(status_code=503, detail="Node not initialized")
+    
+    # 1. Check Mempool
+    tx = node.mempool.get_transaction(tx_id)
+    if tx:
+        return {
+            "id": tx.tx_id,
+            "sender": tx.sender,
+            "recipient": tx.recipient,
+            "amount": tx.amount,
+            "timestamp": tx.timestamp,
+            "status": "Pending",
+            "block_height": None
+        }
+    
+    # 2. Check Blockchain
+    result = node.blockchain.get_transaction(tx_id)
+    if result:
+        tx, height = result
+        return {
+            "id": tx.tx_id,
+            "sender": tx.sender,
+            "recipient": tx.recipient,
+            "amount": tx.amount,
+            "timestamp": tx.timestamp,
+            "status": "Confirmed",
+            "block_height": height
+        }
+        
+    raise HTTPException(status_code=404, detail="Transaction not found")
+
 # --- Debug Endpoints ---
 
 @app.post("/debug/mempool/clear")

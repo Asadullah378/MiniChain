@@ -120,3 +120,49 @@ def test_debug_disconnect(client, mock_node):
     
     # Verify connections are cleared
     assert len(mock_node.network.connections) == 0
+
+def test_get_transaction_details_mempool(client, mock_node):
+    # Mock transaction in mempool
+    mock_tx = MagicMock()
+    mock_tx.tx_id = "tx1"
+    mock_tx.sender = "alice"
+    mock_tx.recipient = "bob"
+    mock_tx.amount = 10.0
+    mock_tx.timestamp = 1234567890
+    
+    mock_node.mempool.get_transaction.return_value = mock_tx
+    
+    response = client.get("/transactions/tx1")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == "tx1"
+    assert data["status"] == "Pending"
+    assert data["block_height"] is None
+
+def test_get_transaction_details_blockchain(client, mock_node):
+    # Mock transaction not in mempool
+    mock_node.mempool.get_transaction.return_value = None
+    
+    # Mock transaction in blockchain
+    mock_tx = MagicMock()
+    mock_tx.tx_id = "tx2"
+    mock_tx.sender = "bob"
+    mock_tx.recipient = "alice"
+    mock_tx.amount = 5.0
+    mock_tx.timestamp = 1234567890
+    
+    mock_node.blockchain.get_transaction.return_value = (mock_tx, 15)
+    
+    response = client.get("/transactions/tx2")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["id"] == "tx2"
+    assert data["status"] == "Confirmed"
+    assert data["block_height"] == 15
+
+def test_get_transaction_details_not_found(client, mock_node):
+    mock_node.mempool.get_transaction.return_value = None
+    mock_node.blockchain.get_transaction.return_value = None
+    
+    response = client.get("/transactions/tx3")
+    assert response.status_code == 404

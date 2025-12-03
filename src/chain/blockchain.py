@@ -1,6 +1,6 @@
 """Blockchain management and validation."""
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 import json
 import time
@@ -210,4 +210,23 @@ class Blockchain:
         for block in self.chain:
             transactions.extend(block.transactions)
         return transactions
+
+    def get_transaction(self, tx_id: str) -> Optional[Tuple[Transaction, int]]:
+        """
+        Find a transaction by ID in the blockchain.
+        
+        Args:
+            tx_id: Transaction ID to find
+            
+        Returns:
+            Tuple of (Transaction, block_height) if found, None otherwise
+        """
+        # This is a linear search, which is inefficient for large chains.
+        # In a real blockchain, we'd use a transaction index (e.g., LevelDB/RocksDB).
+        # For MiniChain, this is acceptable.
+        for block in reversed(self.chain):
+            for tx in block.transactions:
+                if tx.tx_id == tx_id:
+                    return tx, block.height
+        return None
 

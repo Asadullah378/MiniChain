@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Blocks from './pages/Blocks';
 import Mempool from './pages/Mempool';
 import SendTransaction from './pages/SendTransaction';
+import TransactionDetails from './pages/TransactionDetails';
 import { NodeProvider } from './context/NodeContext';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
             <Route path="blocks" element={<Blocks />} />
             <Route path="mempool" element={<Mempool />} />
             <Route path="send-transaction" element={<SendTransaction />} />
+            <Route path="transaction/:txId" element={<TransactionDetails />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

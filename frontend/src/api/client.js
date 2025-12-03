@@ -56,4 +56,14 @@ export const submitTransaction = async (transaction) => {
   return response.data;
 };
 
+export const getTransactionDetails = async (txId) => {
+  try {
+    const response = await api.get(`/transactions/${txId}`);
+    return response.data;
+  } catch (error) {
+    console.warn("API Error (getTransactionDetails):", error.message);
+    throw error;
+  }
+};
+
 export default api;

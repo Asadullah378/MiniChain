@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, ArrowRight, Clock } from 'lucide-react';
 import { getMempool } from '../api/client';
@@ -69,9 +70,9 @@ const Mempool = () => {
                                                             <ArrowRight className="w-3 h-3 text-slate-600" />
                                                             <span className="font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">{tx.recipient}</span>
                                                         </div>
-                                                        <p className="text-xs text-slate-500 mt-1 font-mono tracking-wide opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        <Link to={`/transaction/${tx.id}`} className="text-xs text-slate-500 mt-1 font-mono tracking-wide opacity-60 group-hover:opacity-100 transition-opacity hover:text-blue-500 hover:underline block">
                                                             ID: {tx.id.substring(0, 16)}...
-                                                        </p>
+                                                        </Link>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">

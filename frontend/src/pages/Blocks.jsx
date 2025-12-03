@@ -44,7 +44,7 @@ const BlockCard = ({ block, index, isLast }) => (
                     </div>
                     <div className="w-px h-4 bg-slate-300 dark:bg-slate-700" />
                     <div className="font-medium text-slate-600 dark:text-slate-300">
-                        {block.tx_count} txs
+                        {block.tx_count} transactions
                     </div>
                 </div>
             </div>
