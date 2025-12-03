@@ -2,6 +2,7 @@
 
 A simple blockchain implementation for distributed systems demonstration.
 
+![Mini Chain](./sample/MiniChainSample.png)
 ## Overview
 
 MiniChain is a minimal blockchain implementation that demonstrates key distributed systems concepts:
