@@ -98,35 +98,64 @@ This will remove:
 
 ### 4. Run Frontend (Vite React)
 
-To run the dashboard UI during development on a VM and access it from your local machine:
+The frontend now supports connecting to multiple backend nodes.
 
-```bash
-cd frontend
-npm install
-# Bind to 0.0.0.0 so it's reachable via VM IP
-npm run dev -- --host
+#### Multi-Node Setup (Recommended)
+
+To run a full 3-node network on VMs and access it locally:
+
+1.  **Start Backend Nodes (on VMs)**:
+
+    Open 3 separate terminals on your local machine and run the following commands to start 3 nodes with port forwarding:
+
+    **Node 1 (Port 8001):**
+    ```bash
+    ssh -L 8001:localhost:8001 -J <user>@melkki.cs.helsinki.fi <user>@svm-11.cs.helsinki.fi
+    cd MiniChain/
+    ./start.sh svm-11.cs.helsinki.fi --api-port 8001 --no-cli
+    ```
+
+    **Node 2 (Port 8002):**
+    ```bash
+    ssh -L 8002:localhost:8002 -J <user>@melkki.cs.helsinki.fi <user>@svm-11-2.cs.helsinki.fi
+    cd MiniChain/
+    ./start.sh svm-11-2.cs.helsinki.fi --api-port 8002 --no-cli
+    ```
+
+    **Node 3 (Port 8003):**
+    ```bash
+    ssh -L 8003:localhost:8003 -J <user>@melkki.cs.helsinki.fi <user>@svm-11-3.cs.helsinki.fi
+    cd MiniChain/
+    ./start.sh svm-11-3.cs.helsinki.fi --api-port 8003 --no-cli
+    ```
+
+    *Replace `<user>` with your username.*
+
+2.  **Start Frontend (Locally)**:
+
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+
+3.  **Access Dashboard**:
+    Open `http://localhost:5173` in your browser.
+
+#### Switching Nodes
+
+The frontend includes a node selector in the sidebar. You can switch between the connected nodes to view the state of different parts of the network.
+
+- **Default Nodes**: The frontend is configured to connect to `localhost:8001`, `localhost:8002`, and `localhost:8003` by default.
+- **Adding More Nodes**: To add or modify nodes, edit `frontend/src/nodeConfig.js`.
+
+```javascript
+// frontend/src/nodeConfig.js
+export const nodes = [
+    { id: 'node1', name: 'Node 1', url: 'http://localhost:8001' },
+    // ... add more nodes here
+];
 ```
-
-Access from your local browser:
-
-- Direct (bridged network, firewall open): `http://<vm_ip>:5173/`
-- SSH tunnel (reliable fallback):
-  ```bash
-  ssh -L 5173:localhost:5173 -L 8000:localhost:8000 <user>@<vm_ip>
-  ```
-  Start frontend with API pointing to localhost (to match the tunnel):
-  ```bash
-  VITE_API_URL="http://localhost:8000" npm run dev -- --host
-  ```
-  Open `http://localhost:5173` and API `http://localhost:8000/status`.
-
-Frontend API base URL:
-
-- Configured via `VITE_API_URL`. If the API runs on the VM at `8000`, you can start dev with:
-  ```bash
-  VITE_API_URL="http://<vm_ip>:8000" npm run dev -- --host
-  ```
-  The client code reads `VITE_API_URL` or falls back to the page origin.
 
 ## Configuration
 
