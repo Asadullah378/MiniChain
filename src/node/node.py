@@ -3,7 +3,7 @@
 import threading
 import time
 import socket
-from typing import Optional, List
+from typing import Optional, List, Dict
 from src.common.config import Config
 from src.common.logger import setup_logger
 from src.chain.blockchain import Blockchain
@@ -34,6 +34,15 @@ class Node:
             log_file=config.get('logging.file'),
             console=config.get('logging.console', True) and not disable_console_logging
         )
+        
+        # Track ACKs sent to prevent duplicates
+        self.acks_sent: Dict[int, bool] = {}  # height -> whether ACK was sent
+        
+        # Track COMMIT messages being processed to prevent duplicates
+        self.commits_processing: Dict[int, bool] = {}  # height -> whether COMMIT is being processed
+        
+        # Track COMMIT messages broadcast by leader to prevent duplicates
+        self.commits_broadcast: Dict[int, bool] = {}  # height -> whether COMMIT was broadcast
         
         # Initialize components
         self.blockchain = Blockchain(data_dir=config.get_data_dir())
@@ -137,6 +146,9 @@ class Node:
         
         self.running = False
         self.consensus_thread: Optional[threading.Thread] = None
+        
+        # Clean up old ACK tracking entries periodically (keep only last 10 heights)
+        self._cleanup_old_acks()
     
     def submit_transaction(self, tx: Transaction) -> bool:
         """
@@ -183,6 +195,24 @@ class Node:
         self.running = False
         self.network.stop()
         self.logger.info("Node stopped.")
+    
+    def _cleanup_old_acks(self):
+        """Clean up old ACK tracking entries to prevent memory leaks."""
+        current_height = self.blockchain.get_height()
+        # Keep only ACK tracking for heights within last 10 blocks
+        heights_to_remove = [h for h in self.acks_sent.keys() if h < current_height - 10]
+        for h in heights_to_remove:
+            del self.acks_sent[h]
+        
+        # Also cleanup COMMIT processing flags
+        heights_to_remove_commits = [h for h in self.commits_processing.keys() if h < current_height - 10]
+        for h in heights_to_remove_commits:
+            del self.commits_processing[h]
+        
+        # Cleanup COMMIT broadcast tracking
+        heights_to_remove_broadcast = [h for h in self.commits_broadcast.keys() if h < current_height - 10]
+        for h in heights_to_remove_broadcast:
+            del self.commits_broadcast[h]
     
     def _consensus_loop(self):
         """Main consensus loop running in background thread."""
@@ -332,10 +362,14 @@ class Node:
             # Store pending proposal
             self.consensus.pending_proposal = block
             
-            # Send ACK directly to leader only
+            # Send ACK directly to leader only (prevent duplicate ACKs)
             leader_hostname = proposer_id  # The proposer is the leader
-            self.logger.info(f"ACKing proposal at height {height} to leader {leader_hostname}")
-            self.network.send_ack(height, block_hash, self.config.get_hostname(), leader_hostname)
+            if height not in self.acks_sent or not self.acks_sent[height]:
+                self.acks_sent[height] = True
+                self.logger.info(f"ACKing proposal at height {height} to leader {leader_hostname}")
+                self.network.send_ack(height, block_hash, self.config.get_hostname(), leader_hostname)
+            else:
+                self.logger.debug(f"Already ACKed proposal at height {height}, skipping duplicate ACK")
         
         except Exception as e:
             self.logger.error(f"Error handling proposal: {e}", exc_info=True)
@@ -369,13 +403,22 @@ class Node:
                     self.logger.debug(f"Block {height} already committed (current height: {current_height}), ignoring ACK")
                     return
                 
-                # Check if we're already committing this block (prevent concurrent commits)
+                # Check and set committing flag atomically to prevent race conditions
+                # This prevents multiple threads from processing quorum simultaneously
                 if self.consensus.is_committing(height):
                     self.logger.debug(f"Block {height} is already being committed, ignoring duplicate ACK")
                     return
                 
-                # Set committing flag to prevent concurrent commit attempts
+                # Set committing flag BEFORE processing to prevent race conditions
                 self.consensus.set_committing(height, True)
+                
+                # Double-check height after setting flag (in case another thread already committed)
+                current_height = self.blockchain.get_height()
+                if current_height >= height:
+                    # Another thread already committed, clear flag and return
+                    self.consensus.set_committing(height, False)
+                    self.logger.debug(f"Block {height} was committed by another thread, ignoring")
+                    return
                 
                 self.logger.info(f"Quorum reached for height {height}, committing block")
                 if self.consensus.pending_proposal:
@@ -392,13 +435,24 @@ class Node:
                         # Update consensus state (this clears pending_proposal)
                         self.consensus.on_block_committed(height)
                         
+                        # Clear ACK tracking for this height and cleanup old entries
+                        if height in self.acks_sent:
+                            del self.acks_sent[height]
+                        self._cleanup_old_acks()
+                        
                         # Broadcast COMMIT - use hostname for consistency
-                        self.network.broadcast_commit(
-                            height,
-                            block_hash,  # Use saved block_hash
-                            self.config.get_hostname()
-                        )
-                        self.logger.info(f"Block {height} committed")
+                        # Only broadcast once (check if already broadcast to prevent duplicates)
+                        if height not in self.commits_broadcast or not self.commits_broadcast[height]:
+                            self.commits_broadcast[height] = True
+                            self.network.broadcast_commit(
+                                height,
+                                block_hash,  # Use saved block_hash
+                                self.config.get_hostname()
+                            )
+                            self.logger.info(f"Block {height} committed and COMMIT broadcast")
+                        else:
+                            self.logger.debug(f"COMMIT for height {height} already broadcast, skipping duplicate")
+                            self.logger.info(f"Block {height} committed")
                     else:
                         # Block validation failed - clear committing flag to allow retry
                         self.consensus.set_committing(height, False)
@@ -428,21 +482,62 @@ class Node:
             height = payload['height']
             block_hash = bytes.fromhex(payload['block_hash'])
             
-            # If we have the pending proposal, commit it
-            if (self.consensus.pending_proposal and 
-                self.consensus.pending_proposal.height == height and
-                self.consensus.pending_proposal.block_hash == block_hash):
+            # Check if block is already committed (prevent duplicate commits)
+            current_height = self.blockchain.get_height()
+            if current_height >= height:
+                # Block already committed, ignore duplicate COMMIT
+                self.logger.debug(f"Block {height} already committed (current height: {current_height}), ignoring duplicate COMMIT")
+                return
+            
+            # Check if we're already processing a COMMIT for this height (prevent concurrent processing)
+            if self.commits_processing.get(height, False):
+                self.logger.debug(f"Already processing COMMIT for height {height}, ignoring duplicate")
+                return
+            
+            # Set flag to indicate we're processing this COMMIT
+            self.commits_processing[height] = True
+            
+            try:
+                # Double-check height after setting flag (in case another thread already committed)
+                current_height = self.blockchain.get_height()
+                if current_height >= height:
+                    # Block was committed by another thread, clear flag and return
+                    self.commits_processing[height] = False
+                    self.logger.debug(f"Block {height} was committed by another thread, ignoring COMMIT")
+                    return
                 
-                if self.blockchain.add_block(self.consensus.pending_proposal):
-                    # Remove transactions from mempool
-                    tx_ids = [tx.tx_id for tx in self.consensus.pending_proposal.transactions]
-                    self.mempool.remove_transactions(tx_ids)
+                # If we have the pending proposal, commit it
+                if (self.consensus.pending_proposal and 
+                    self.consensus.pending_proposal.height == height and
+                    self.consensus.pending_proposal.block_hash == block_hash):
                     
-                    # Update consensus state
-                    self.consensus.on_block_committed(height)
-                    self.logger.info(f"Block {height} committed via COMMIT message")
+                    if self.blockchain.add_block(self.consensus.pending_proposal):
+                        # Remove transactions from mempool
+                        tx_ids = [tx.tx_id for tx in self.consensus.pending_proposal.transactions]
+                        self.mempool.remove_transactions(tx_ids)
+                        
+                        # Update consensus state
+                        self.consensus.on_block_committed(height)
+                        # Clear ACK tracking for this height
+                        if height in self.acks_sent:
+                            del self.acks_sent[height]
+                        # Clear COMMIT processing flag
+                        if height in self.commits_processing:
+                            del self.commits_processing[height]
+                        self.logger.info(f"Block {height} committed via COMMIT message")
+                    else:
+                        # Block validation failed - clear flag to allow retry
+                        self.commits_processing[height] = False
+                        self.logger.error(f"Failed to commit block {height}")
                 else:
-                    self.logger.error(f"Failed to commit block {height}")
+                    # No matching pending proposal - might have been committed already or proposal was cleared
+                    self.commits_processing[height] = False
+                    self.logger.debug(f"Received COMMIT for height {height} but no matching pending proposal")
+            except Exception as e:
+                # Clear flag on error
+                if height in self.commits_processing:
+                    self.commits_processing[height] = False
+                raise
         
         except Exception as e:
             self.logger.error(f"Error handling COMMIT: {e}", exc_info=True)

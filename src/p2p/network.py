@@ -247,9 +247,10 @@ class NetworkManager:
         self._send_to_leader(message, leader_hostname)
     
     def _send_to_leader(self, message: Message, leader_hostname: str):
-        """Send a message to a specific leader node."""
+        """Send a message to a specific leader node. Only sends once even if multiple connections exist."""
         # Extract short hostname for matching (e.g., "svm-11-3" from "svm-11-3.cs.helsinki.fi")
         leader_short = leader_hostname.split('.')[0]
+        sent = False
         
         # First, try to find in existing connections
         with self.connection_lock:
@@ -263,37 +264,42 @@ class NetworkManager:
                     leader_short == peer_short or
                     leader_hostname in peer_hostname or
                     peer_hostname in leader_hostname):
-                    try:
-                        self._send_message(sock, message)
-                        self.logger.debug(f"Sent ACK to leader {leader_hostname} at {peer_address}")
-                        return
-                    except Exception as e:
-                        self.logger.warning(f"Failed to send to leader {leader_hostname} at {peer_address}: {e}")
+                    if not sent:  # Only send once, even if multiple connections match
+                        try:
+                            self._send_message(sock, message)
+                            self.logger.debug(f"Sent ACK to leader {leader_hostname} at {peer_address}")
+                            sent = True
+                            return  # Successfully sent, exit early
+                        except Exception as e:
+                            self.logger.warning(f"Failed to send to leader {leader_hostname} at {peer_address}: {e}")
         
         # If not found in connections, try to find by hostname in peers list
-        for peer in self.peers:
-            peer_hostname = peer.get('hostname', '')
-            peer_short = peer_hostname.split('.')[0] if peer_hostname else ''
-            
-            if (leader_hostname == peer_hostname or 
-                leader_short == peer_short or
-                leader_hostname in peer_hostname):
-                # Try to connect and send
-                try:
-                    hostname = peer.get('hostname')
-                    port = peer.get('port', self.port)
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(5)
-                    sock.connect((hostname, port))
-                    sock.settimeout(None)
-                    self._send_message(sock, message)
-                    sock.close()
-                    self.logger.debug(f"Sent ACK to leader {leader_hostname} via new connection")
-                    return
-                except Exception as e:
-                    self.logger.warning(f"Failed to send ACK to leader {leader_hostname}: {e}")
+        if not sent:
+            for peer in self.peers:
+                peer_hostname = peer.get('hostname', '')
+                peer_short = peer_hostname.split('.')[0] if peer_hostname else ''
+                
+                if (leader_hostname == peer_hostname or 
+                    leader_short == peer_short or
+                    leader_hostname in peer_hostname):
+                    # Try to connect and send
+                    try:
+                        hostname = peer.get('hostname')
+                        port = peer.get('port', self.port)
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(5)
+                        sock.connect((hostname, port))
+                        sock.settimeout(None)
+                        self._send_message(sock, message)
+                        sock.close()
+                        self.logger.debug(f"Sent ACK to leader {leader_hostname} via new connection")
+                        sent = True
+                        return  # Successfully sent, exit early
+                    except Exception as e:
+                        self.logger.warning(f"Failed to send ACK to leader {leader_hostname}: {e}")
         
-        self.logger.warning(f"Could not find connection to leader {leader_hostname} for ACK")
+        if not sent:
+            self.logger.warning(f"Could not find connection to leader {leader_hostname} for ACK")
     
     def broadcast_commit(self, height: int, block_hash: bytes, leader_id: str):
         """Broadcast COMMIT message."""
