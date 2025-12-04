@@ -23,13 +23,14 @@ class Blockchain:
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.chain: List[Block] = []
-        self._load_chain()
-        self.logger = logger = setup_logger(
+        # Initialize logger BEFORE calling _load_chain() since it uses self.logger
+        self.logger = setup_logger(
             'minichain.blockchain',
             level='INFO',
             log_file=config.get('logging.file'),
             console=config.get('logging.console', True)
         )
+        self._load_chain()
     
     def _load_chain(self):
         """Load blockchain from disk or create genesis block."""
@@ -37,6 +38,7 @@ class Blockchain:
         
         if chain_file.exists():
             try:
+                self.logger.info(f" Loading blockchain from {chain_file}...")
                 with open(chain_file, 'r') as f:
                     chain_data = json.load(f)
                     self.chain = [Block.from_dict(block_data) for block_data in chain_data]
@@ -45,24 +47,30 @@ class Blockchain:
                 if len(self.chain) > 0:
                     expected_genesis = create_genesis_block(proposer_id="genesis")
                     if self.chain[0].block_hash != expected_genesis.block_hash:
-                        print(f"Warning: Genesis block doesn't match expected. Recreating chain.")
+                        self.logger.warning(f" Genesis block doesn't match expected. Recreating chain.")
                         self._create_genesis()
                     else:
-                        print(f"Loaded blockchain with {len(self.chain)} blocks")
+                        self.logger.info(f" Loaded blockchain with {len(self.chain)} block(s) from disk")
+                        self.logger.debug(f"   Latest block: height={self.chain[-1].height}, hash={self.chain[-1].block_hash.hex()[:16]}...")
                 else:
+                    self.logger.warning(f" Chain file exists but is empty, creating genesis block")
                     self._create_genesis()
             except Exception as e:
-                print(f"Error loading chain: {e}. Creating new chain.")
+                self.logger.error(f" Error loading chain from {chain_file}: {e}", exc_info=True)
+                self.logger.info(f" Recreating blockchain with genesis block...")
                 self._create_genesis()
         else:
+            self.logger.info(f" Chain file not found, creating new blockchain with genesis block...")
             self._create_genesis()
     
     def _create_genesis(self):
         """Create and add genesis block."""
         # Use fixed proposer_id for deterministic genesis block
+        self.logger.info(f" Creating genesis block...")
         genesis = create_genesis_block(proposer_id="genesis")
         self.chain = [genesis]
         self._save_chain()
+        self.logger.info(f" Genesis block created: height=0, hash={genesis.block_hash.hex()[:16]}...")
     
     def _save_chain(self):
         """Save blockchain to disk."""
@@ -94,11 +102,16 @@ class Blockchain:
         Returns:
             True if block was added, False otherwise
         """
+        self.logger.debug(f" Validating block {block.height} before adding to chain...")
         if not self._validate_block(block):
+            self.logger.warning(f" Block {block.height} validation failed, not adding to chain")
             return False
         
+        self.logger.info(f" Adding block {block.height} to blockchain...")
         self.chain.append(block)
         self._save_chain()
+        self.logger.info(f" Block {block.height} successfully added to blockchain (chain length: {len(self.chain)})")
+        self.logger.debug(f"   Block hash: {block.block_hash.hex()[:16]}..., Transactions: {len(block.transactions)}")
         return True
     
     def _validate_block(self, block: Block) -> bool:
@@ -113,20 +126,24 @@ class Blockchain:
         """
         # Check block structure
         if not block.is_valid():
+            self.logger.warning(f" Block {block.height} structure validation failed")
             return False
         
         # Check height
         expected_height = self.get_height() + 1
         if block.height != expected_height:
-            self.logger.warning(f"Height mismatch: expected {expected_height}, got {block.height}")
+            self.logger.warning(f" Height mismatch for block {block.height}: expected {expected_height}, got {block.height}")
             return False
         
         # Check previous hash
         latest_hash = self.get_latest_hash()
         if block.prev_hash != latest_hash:
-            self.logger.warning(f"Previous hash mismatch: expected {latest_hash}, got {block.prev_hash}")
+            self.logger.warning(f" Previous hash mismatch for block {block.height}")
+            self.logger.warning(f"   Expected: {latest_hash.hex()[:32]}...")
+            self.logger.warning(f"   Got:      {block.prev_hash.hex()[:32]}...")
             return False
         
+        self.logger.debug(f" Block {block.height} validation passed")
         return True
     
     def get_block(self, height: int) -> Optional[Block]:

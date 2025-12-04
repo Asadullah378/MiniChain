@@ -40,45 +40,55 @@ class NetworkManager:
     
     def start(self):
         """Start network manager."""
-        self.logger.info(f"Starting network manager on {self.hostname}:{self.port}")
+        self.logger.info(f" Starting network manager on {self.hostname}:{self.port}")
+        self.logger.info(f" Configured peers: {len(self.peers)}")
         self.running = True
         
         # Start listener
+        self.logger.info(f" Starting listener on port {self.port}...")
         self.listener_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.listener_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.listener_socket.bind(('0.0.0.0', self.port))
         self.listener_socket.listen(10)
         self.listener_socket.settimeout(1.0)  # Allow periodic checks
+        self.logger.info(f" Listener started on {self.hostname}:{self.port}")
         
         self.listener_thread = threading.Thread(target=self._listener_loop, daemon=True)
         self.listener_thread.start()
+        self.logger.info(f" Listener thread started")
         
         # Connect to peers
+        self.logger.info(f" Initiating connections to {len(self.peers)} peer(s)...")
         time.sleep(0.5)  # Give listener time to start
         self._connect_to_peers()
     
     def stop(self):
         """Stop network manager."""
-        self.logger.info("Stopping network manager...")
+        self.logger.info("🛑 Stopping network manager...")
         self.running = False
         
         if self.listener_socket:
+            self.logger.debug(" Closing listener socket...")
             self.listener_socket.close()
         
         with self.connection_lock:
+            connection_count = len(self.connections)
+            self.logger.info(f" Closing {connection_count} peer connection(s)...")
             for sock in self.connections.values():
                 try:
                     sock.close()
                 except:
                     pass
             self.connections.clear()
+        self.logger.info(" Network manager stopped")
     
     def _listener_loop(self):
         """Listen for incoming connections."""
+        self.logger.info(" Listener loop started, waiting for incoming connections...")
         while self.running:
             try:
                 client_socket, address = self.listener_socket.accept()
-                self.logger.info(f"New connection from {address}")
+                self.logger.info(f" New incoming connection from {address[0]}:{address[1]}")
                 
                 # Handle connection in separate thread
                 thread = threading.Thread(
@@ -87,11 +97,12 @@ class NetworkManager:
                     daemon=True
                 )
                 thread.start()
+                self.logger.debug(f" Started handler thread for connection from {address[0]}:{address[1]}")
             except socket.timeout:
                 continue
             except Exception as e:
                 if self.running:
-                    self.logger.error(f"Error in listener: {e}")
+                    self.logger.error(f" Error in listener: {e}", exc_info=True)
     
     def _handle_connection(self, sock: socket.socket, address: Tuple[str, int]):
         """Handle a connection from a peer."""
@@ -99,38 +110,45 @@ class NetworkManager:
         
         with self.connection_lock:
             self.connections[peer_address] = sock
+        self.logger.info(f" Connection established with {peer_address} (total connections: {len(self.connections)})")
         
         try:
             while self.running:
                 # Receive message length (4 bytes)
                 length_data = sock.recv(4)
                 if not length_data or len(length_data) < 4:
+                    self.logger.debug(f" Connection closed by {peer_address} (no length data)")
                     break
                 
                 length = int.from_bytes(length_data, 'big')
+                self.logger.debug(f" Receiving message from {peer_address} (length: {length} bytes)")
                 
                 # Receive message data
                 data = b''
                 while len(data) < length:
                     chunk = sock.recv(length - len(data))
                     if not chunk:
+                        self.logger.debug(f" Connection closed by {peer_address} during data receive")
                         break
                     data += chunk
                 
                 if len(data) < length:
+                    self.logger.warning(f" Incomplete message received from {peer_address} (expected {length}, got {len(data)})")
                     break
                 
                 # Deserialize and handle message
                 message = Message.deserialize(data)
+                self.logger.debug(f" Message received and deserialized from {peer_address}: {message.type.value}")
                 self.message_handler(message, peer_address)
         
         except Exception as e:
             if self.running:
-                self.logger.error(f"Error handling connection from {peer_address}: {e}")
+                self.logger.error(f" Error handling connection from {peer_address}: {e}", exc_info=True)
         finally:
             with self.connection_lock:
                 if peer_address in self.connections:
                     del self.connections[peer_address]
+                    self.logger.info(f" Connection closed with {peer_address} (remaining connections: {len(self.connections)})")
             try:
                 sock.close()
             except:
@@ -138,13 +156,16 @@ class NetworkManager:
     
     def _connect_to_peers(self):
         """Connect to all configured peers."""
+        self.logger.info(f" Attempting to connect to {len(self.peers)} peer(s)...")
         for peer in self.peers:
             hostname = peer.get('hostname')
             port = peer.get('port', self.port)
             
             if hostname == self.hostname and port == self.port:
+                self.logger.debug(f" Skipping self ({hostname}:{port})")
                 continue  # Skip self
             
+            self.logger.debug(f" Starting connection thread to {hostname}:{port}")
             thread = threading.Thread(
                 target=self._connect_to_peer,
                 args=(hostname, port),
@@ -157,29 +178,32 @@ class NetworkManager:
         peer_address = f"{hostname}:{port}"
         
         if peer_address in self.connections:
+            self.logger.debug(f" Already connected to {peer_address}, skipping")
             return  # Already connected
         
         try:
-            self.logger.info(f"Connecting to peer {hostname}:{port}")
+            self.logger.info(f" Connecting to peer {hostname}:{port}...")
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(5)
             sock.connect((hostname, port))
             sock.settimeout(None)
+            self.logger.info(f" Socket connection established to {hostname}:{port}")
             
             with self.connection_lock:
                 self.connections[peer_address] = sock
+                self.logger.debug(f" Added {peer_address} to connections (total: {len(self.connections)})")
             
             # Send HELLO message
+            self.logger.debug(f"👋 Sending HELLO message to {hostname}:{port}")
             hello = Message.create_hello(self.node_id, "0.1.0", self.port)
             self._send_message(sock, hello)
-            
-            self.logger.info(f"Connected to {hostname}:{port}")
+            self.logger.info(f" Connected to {hostname}:{port} and sent HELLO")
             
             # Handle incoming messages from this peer
             self._handle_connection(sock, (hostname, port))
         
         except Exception as e:
-            self.logger.warning(f"Failed to connect to {hostname}:{port}: {e}")
+            self.logger.warning(f" Failed to connect to {hostname}:{port}: {e}")
             with self.connection_lock:
                 if peer_address in self.connections:
                     del self.connections[peer_address]
@@ -190,27 +214,37 @@ class NetworkManager:
             data = message.serialize()
             length = len(data).to_bytes(4, 'big')
             sock.sendall(length + data)
+            self.logger.debug(f" Sent {message.type.value} message ({len(data)} bytes)")
         except Exception as e:
-            self.logger.error(f"Error sending message: {e}")
+            self.logger.error(f" Error sending {message.type.value} message: {e}", exc_info=True)
     
     def _broadcast(self, message: Message, exclude: Optional[str] = None):
         """Broadcast message to all connected peers."""
         with self.connection_lock:
-            for peer_address, sock in list(self.connections.items()):
+            connections = list(self.connections.items())
+            self.logger.debug(f" Broadcasting {message.type.value} to {len(connections)} peer(s)...")
+            success_count = 0
+            for peer_address, sock in connections:
                 if peer_address == exclude:
+                    self.logger.debug(f" Skipping {peer_address} (excluded)")
                     continue
                 try:
                     self._send_message(sock, message)
+                    success_count += 1
                 except Exception as e:
-                    self.logger.warning(f"Failed to send to {peer_address}: {e}")
+                    self.logger.warning(f" Failed to send {message.type.value} to {peer_address}: {e}")
+            self.logger.debug(f" Broadcast complete: {success_count}/{len(connections)} successful")
     
     def broadcast_transaction(self, tx: Transaction):
         """Broadcast a transaction to all peers."""
+        self.logger.debug(f" Broadcasting transaction {tx.tx_id[:16]}... to all peers")
         message = Message.create_tx(self.node_id, tx.serialize())
         self._broadcast(message)
+        self.logger.debug(f" Transaction {tx.tx_id[:16]}... broadcasted")
     
     def broadcast_propose(self, block: Block):
         """Broadcast a block proposal."""
+        self.logger.debug(f" Broadcasting PROPOSE for height {block.height} with {len(block.transactions)} transaction(s)")
         tx_list = [tx.serialize() for tx in block.transactions]
         message = Message.create_propose(
             self.node_id,
@@ -223,6 +257,7 @@ class NetworkManager:
             block.signature
         )
         self._broadcast(message)
+        self.logger.debug(f" PROPOSE for height {block.height} broadcasted")
     
     def send_ack(self, height: int, block_hash: bytes, voter_id: str, leader_hostname: str):
         """
@@ -303,6 +338,7 @@ class NetworkManager:
     
     def broadcast_commit(self, height: int, block_hash: bytes, leader_id: str):
         """Broadcast COMMIT message."""
+        self.logger.debug(f" Broadcasting COMMIT for height {height} (leader: {leader_id})")
         message = Message.create_commit(
             self.node_id,
             height,
@@ -311,6 +347,7 @@ class NetworkManager:
             b''  # TODO: Add proper signature
         )
         self._broadcast(message)
+        self.logger.debug(f" COMMIT for height {height} broadcasted")
     
     def send_headers(self, headers: List[Dict], peer_address: str):
         """Send block headers to a peer."""

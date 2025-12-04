@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
     Server, Database, Users, Activity, Send, Layers, Clock, 
-    Terminal, Pause, Play, Filter, Download, X, ChevronDown, ChevronUp, ArrowLeft 
+    Terminal, Pause, Play, Filter, Download, X, ChevronDown, ChevronUp, ArrowLeft, Maximize2, Minimize2 
 } from 'lucide-react';
 import { getStatus, setApiBaseUrl, api } from '../api/client';
 import { nodes } from '../nodeConfig';
@@ -78,8 +78,10 @@ const NodePanel = ({ node, index }) => {
     const [showMempool, setShowMempool] = useState(false);
     const [showBlocks, setShowBlocks] = useState(false);
     const [showSendTx, setShowSendTx] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const eventSourceRef = useRef(null);
     const containerRef = useRef(null);
+    const fullscreenContainerRef = useRef(null);
 
     // Fetch status
     const fetchStatus = useCallback(async () => {
@@ -147,9 +149,10 @@ const NodePanel = ({ node, index }) => {
                                         initialLogsBatch = [];
                                         initialBatchSet = true; // Mark as set so we never overwrite again
                                         
-                                        // Scroll to top after initial batch
-                                        if (containerRef.current) {
-                                            containerRef.current.scrollTop = 0;
+                                        // Scroll to top after initial batch (for both regular and fullscreen containers)
+                                        const currentContainer = isFullscreen ? fullscreenContainerRef.current : containerRef.current;
+                                        if (currentContainer) {
+                                            currentContainer.scrollTop = 0;
                                         }
                                     }
                                 }, 500);
@@ -160,11 +163,12 @@ const NodePanel = ({ node, index }) => {
                                     return newLogs.slice(0, 100); // Keep last 100 logs per node
                                 });
 
-                                // Auto-scroll to top if at top
-                                if (containerRef.current && containerRef.current.scrollTop < 50) {
+                                // Auto-scroll to top if at top (for both regular and fullscreen containers)
+                                const currentContainer = isFullscreen ? fullscreenContainerRef.current : containerRef.current;
+                                if (currentContainer && currentContainer.scrollTop < 50) {
                                     requestAnimationFrame(() => {
-                                        if (containerRef.current) {
-                                            containerRef.current.scrollTop = 0;
+                                        if (currentContainer) {
+                                            currentContainer.scrollTop = 0;
                                         }
                                     });
                                 }
@@ -199,7 +203,7 @@ const NodePanel = ({ node, index }) => {
                 eventSourceRef.current.close();
             }
         };
-    }, [node.url, isPaused]);
+    }, [node.url, isPaused, isFullscreen]);
 
     const handleClearLogs = () => {
         setLogs([]);
@@ -218,6 +222,13 @@ const NodePanel = ({ node, index }) => {
                         <h3 className="font-bold text-slate-900 dark:text-white">{node.name}</h3>
                     </div>
                     <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setIsFullscreen(true)}
+                            className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs"
+                            title="Fullscreen logs"
+                        >
+                            <Maximize2 className="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+                        </button>
                         <button
                             onClick={() => setIsPaused(!isPaused)}
                             className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-xs"
@@ -317,6 +328,109 @@ const NodePanel = ({ node, index }) => {
                 <span className="font-mono">{logs.length} logs</span>
                 <span className="font-mono">{isPaused ? '⏸' : '▶'}</span>
             </div>
+
+            {/* Fullscreen Logs Modal */}
+            {isFullscreen && (
+                <div className="fixed inset-0 z-50 bg-slate-900 dark:bg-black flex flex-col">
+                    {/* Header */}
+                    <div className="bg-slate-800 dark:bg-slate-900 border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className={clsx(
+                                'w-2 h-2 rounded-full',
+                                isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+                            )} />
+                            <h2 className="text-xl font-bold text-white">{node.name} - Logs</h2>
+                            <span className="text-sm text-slate-400 font-mono">{node.url}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsPaused(!isPaused)}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm flex items-center gap-2"
+                                title={isPaused ? 'Resume' : 'Pause'}
+                            >
+                                {isPaused ? (
+                                    <>
+                                        <Play className="w-4 h-4" />
+                                        <span>Resume</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Pause className="w-4 h-4" />
+                                        <span>Pause</span>
+                                    </>
+                                )}
+                            </button>
+                            <button
+                                onClick={handleClearLogs}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm flex items-center gap-2"
+                                title="Clear logs"
+                            >
+                                <X className="w-4 h-4" />
+                                <span>Clear</span>
+                            </button>
+                            <button
+                                onClick={() => setIsFullscreen(false)}
+                                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm flex items-center gap-2"
+                                title="Exit fullscreen"
+                            >
+                                <Minimize2 className="w-4 h-4" />
+                                <span>Exit Fullscreen</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Logs Container */}
+                    <div
+                        ref={fullscreenContainerRef}
+                        className="logs-scrollbar flex-1 bg-slate-950 dark:bg-black text-slate-100 font-mono text-sm overflow-y-auto"
+                    >
+                        {logs.length === 0 ? (
+                            <div className="flex items-center justify-center h-full text-slate-500 text-sm">
+                                Waiting for logs...
+                            </div>
+                        ) : (
+                            <div className="py-2">
+                                {logs.map((entry, idx) => (
+                                    <div
+                                        key={`${entry.timestamp}-${idx}-${entry.raw}`}
+                                        className={clsx(
+                                            'font-mono text-sm leading-relaxed px-6 py-1.5 transition-colors',
+                                            'hover:bg-slate-800/50',
+                                            (entry.level === 'ERROR' || entry.level === 'CRITICAL') && 'bg-red-500/10 border-l-2 border-red-500',
+                                            entry.level === 'WARNING' && entry.level !== 'ERROR' && entry.level !== 'CRITICAL' && 'bg-amber-500/10 border-l-2 border-amber-500'
+                                        )}
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <span className="text-slate-400 flex-shrink-0 w-24 text-right text-xs">
+                                                {entry.timestamp ? entry.timestamp.split(' ')[1] : '--:--'}
+                                            </span>
+                                            <div className="flex-shrink-0">
+                                                <LogLevelBadge level={entry.level} />
+                                            </div>
+                                            <span className={clsx(
+                                                'flex-1 break-words',
+                                                (entry.level === 'ERROR' || entry.level === 'CRITICAL')
+                                                    ? 'text-red-300'
+                                                    : entry.level === 'WARNING'
+                                                    ? 'text-amber-300'
+                                                    : 'text-slate-200'
+                                            )}>
+                                                {entry.message}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="bg-slate-800 dark:bg-slate-900 border-t border-slate-700 px-6 py-2 flex items-center justify-between text-sm text-slate-400">
+                        <span className="font-mono">{logs.length} logs</span>
+                        <span className="font-mono">{isPaused ? '⏸ Paused' : '▶ Live'}</span>
+                    </div>
+                </div>
+            )}
 
             {/* Dialogs */}
             <MempoolDialog
