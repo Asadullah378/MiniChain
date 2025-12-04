@@ -5,7 +5,10 @@ from pathlib import Path
 import json
 import time
 from src.chain.block import Block, Transaction, create_genesis_block
+from src.common.logger import setup_logger
+from src.common.config import Config
 
+config = Config()
 
 class Blockchain:
     """Manages the blockchain state and operations."""
@@ -21,6 +24,12 @@ class Blockchain:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.chain: List[Block] = []
         self._load_chain()
+        self.logger = logger = setup_logger(
+            'minichain.blockchain',
+            level='INFO',
+            log_file=config.get('logging.file'),
+            console=config.get('logging.console', True)
+        )
     
     def _load_chain(self):
         """Load blockchain from disk or create genesis block."""
@@ -109,11 +118,13 @@ class Blockchain:
         # Check height
         expected_height = self.get_height() + 1
         if block.height != expected_height:
+            self.logger.warning(f"Height mismatch: expected {expected_height}, got {block.height}")
             return False
         
         # Check previous hash
         latest_hash = self.get_latest_hash()
         if block.prev_hash != latest_hash:
+            self.logger.warning(f"Previous hash mismatch: expected {latest_hash}, got {block.prev_hash}")
             return False
         
         return True

@@ -3,7 +3,7 @@ import { mockStatus, mockBlocks, mockMempool } from "./mockData";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || window.location.origin;
 
-const api = axios.create({
+export const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
@@ -65,5 +65,22 @@ export const getTransactionDetails = async (txId) => {
     throw error;
   }
 };
+
+export const getLogs = async (lines = 100, level = null, tail = true) => {
+  try {
+    const params = { lines, tail };
+    if (level) {
+      params.level = level;
+    }
+    const response = await api.get("/logs", { params });
+    return response.data;
+  } catch (error) {
+    console.warn("API Error (getLogs):", error.message);
+    throw error;
+  }
+};
+
+// Note: SSE streaming is handled directly via EventSource in the component
+// No need for a separate function here
 
 export default api;

@@ -5,7 +5,11 @@ from typing import List, Optional, Dict, Any
 import time
 import msgpack
 from src.common.crypto import hash_data
+from src.common.logger import setup_logger
+from src.common.config import Config
 
+
+config = Config()
 
 @dataclass
 class Transaction:
@@ -18,6 +22,7 @@ class Transaction:
     timestamp: float
     signature: bytes = field(default=b'')
     
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert transaction to dictionary."""
         return {
@@ -71,6 +76,13 @@ class Block:
     proposer_id: str
     block_hash: bytes = field(default=b'')
     signature: bytes = field(default=b'')
+    logger = setup_logger(
+            'minichain.block',
+            level='INFO',
+            log_file=config.get('logging.file'),
+            console=config.get('logging.console', True)
+        )
+
     
     def __post_init__(self):
         """Compute block hash after initialization."""
@@ -144,14 +156,17 @@ class Block:
         # Check hash matches
         computed_hash = self.compute_hash()
         if computed_hash != self.block_hash:
+            self.logger.warning(f"Block hash mismatch: {computed_hash} != {self.block_hash}")
             return False
         
         # Check height is non-negative
         if self.height < 0:
+            self.logger.warning(f"Block height is negative: {self.height}")
             return False
         
         # Check transactions list
         if not isinstance(self.transactions, list):
+            self.logger.warning(f"Transactions is not a list: {self.transactions}")
             return False
         
         return True

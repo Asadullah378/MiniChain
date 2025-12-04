@@ -6,7 +6,7 @@ consensus:
   type: "poa_round_robin"
   block_interval: 30  # seconds between block proposals
   proposal_timeout: 10  # seconds to wait for ACKs before timeout
-  quorum_size: 2  # minimum ACKs needed (for 3 nodes: 2/3)
+  quorum_size: 2  # minimum ACKs needed (for 3 nodes: 3/3)
 
 blockchain:
   genesis_block: true

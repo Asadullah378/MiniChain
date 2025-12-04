@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import Sidebar from './Sidebar';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { Menu, Loader2 } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 import { useNode } from '../context/NodeContext';
+import clsx from 'clsx';
 
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     const { isSwitching, selectedNode } = useNode();
+    const location = useLocation();
+
+    const isUnifiedView = location.pathname === '/unified';
 
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans overflow-hidden">
-            <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            {!isUnifiedView && (
+                <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+            )}
 
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Mobile Header */}
@@ -28,8 +34,14 @@ const Layout = () => {
                     </div>
                 </div>
 
-                <main className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth">
-                    <div className="w-full max-w-full pb-20">
+                <main className={clsx(
+                    "flex-1 scroll-smooth",
+                    location.pathname === '/unified' ? "p-4 overflow-hidden" : "p-4 md:p-8 overflow-y-auto"
+                )}>
+                    <div className={clsx(
+                        "w-full max-w-full",
+                        location.pathname !== '/unified' && "pb-20"
+                    )}>
                         <Outlet />
                     </div>
                 </main>

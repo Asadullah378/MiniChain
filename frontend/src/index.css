@@ -25,3 +25,46 @@ h1 {
   font-size: 3.2em;
   line-height: 1.1;
 }
+
+/* Custom scrollbar for logs panels - always visible when content overflows */
+.logs-scrollbar {
+  overflow-y: auto !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+}
+
+.dark .logs-scrollbar {
+  scrollbar-color: rgba(100, 116, 139, 0.6) transparent;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.logs-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.logs-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.logs-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.6);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark .logs-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.6);
+  background-clip: padding-box;
+}
+
+.logs-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.8);
+  background-clip: padding-box;
+}
+
+.dark .logs-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
+  background-clip: padding-box;
+}

@@ -1,7 +1,9 @@
 # MiniChain Peers Configuration
 # Format: hostname:port (one per line)
+# Port 9000 is for P2P communication (internal)
+# Port 8000 is for API server (external)
 
-svm-11.cs.helsinki.fi:8000
-svm-11-2.cs.helsinki.fi:8000
-svm-11-3.cs.helsinki.fi:8000
+svm-11.cs.helsinki.fi:9000
+svm-11-2.cs.helsinki.fi:9000
+svm-11-3.cs.helsinki.fi:9000
 

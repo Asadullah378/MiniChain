@@ -13,13 +13,20 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Fix line endings and set execute permissions for start.sh
+RUN if [ -f start.sh ]; then \
+        sed -i 's/\r$//' start.sh || true; \
+        chmod +x start.sh; \
+    fi
+
 # Expose API port
-EXPOSE 8080
+EXPOSE 8000
 
 # Environment (override via compose/env)
 ENV NODE_HOSTNAME="svm-11.cs.helsinki.fi" \
-    API_PORT=8080 \
+    API_PORT=8000 \
     CLEAN="false"
 
-# Default command runs the node with API enabled
-CMD ["bash", "-lc", "./start.sh \"$NODE_HOSTNAME\" --api-port \"$API_PORT\" $( [ \"$CLEAN\" = \"true\" ] && echo --clean ) "]
+# Default command runs the node with API enabled (no CLI in Docker)
+# Use absolute path and ensure we're in /app
+CMD bash -c "cd /app && bash start.sh \"$NODE_HOSTNAME\" --api-port \"$API_PORT\" --no-cli $( [ \"$CLEAN\" = \"true\" ] && echo --clean )"

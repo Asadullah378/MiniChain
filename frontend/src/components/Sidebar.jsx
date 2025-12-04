@@ -1,18 +1,34 @@
 import React from 'react';
-import { LayoutDashboard, Layers, Send, Activity, X, Clock } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, Layers, Send, Activity, X, Clock, FileText, Grid3x3, LayoutGrid } from 'lucide-react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import clsx from 'clsx';
 import ThemeToggle from './ThemeToggle';
 import { useNode } from '../context/NodeContext';
+import { useView } from '../context/ViewContext';
 
 const Sidebar = ({ isOpen, onClose }) => {
     const { selectedNode, nodes, changeNode } = useNode();
+    const { viewMode, toggleView } = useView();
+    const navigate = useNavigate();
+    const location = useLocation();
+    
     const navItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
         { icon: Layers, label: 'Blockchain', path: '/blocks' },
         { icon: Clock, label: 'Mempool', path: '/mempool' },
         { icon: Send, label: 'Send Transaction', path: '/send-transaction' },
+        { icon: FileText, label: 'Logs', path: '/logs' },
     ];
+
+    const handleViewToggle = () => {
+        if (location.pathname === '/unified') {
+            navigate('/');
+            toggleView();
+        } else {
+            navigate('/unified');
+            toggleView();
+        }
+    };
 
     return (
         <>
@@ -45,6 +61,31 @@ const Sidebar = ({ isOpen, onClose }) => {
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2">
+                    {/* View Toggle */}
+                    <button
+                        onClick={handleViewToggle}
+                        className={clsx(
+                            "w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 group",
+                            location.pathname === '/unified'
+                                ? "bg-purple-600/10 text-purple-400 border border-purple-600/20 shadow-[0_0_20px_rgba(147,51,234,0.1)]"
+                                : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900 hover:text-slate-900 dark:hover:text-white hover:translate-x-1"
+                        )}
+                    >
+                        {location.pathname === '/unified' ? (
+                            <>
+                                <LayoutGrid className="w-5 h-5 transition-colors text-purple-400" />
+                                <span className="font-medium">Unified View</span>
+                            </>
+                        ) : (
+                            <>
+                                <Grid3x3 className="w-5 h-5 transition-colors group-hover:text-purple-400" />
+                                <span className="font-medium">Switch to Unified</span>
+                            </>
+                        )}
+                    </button>
+
+                    <div className="border-t border-slate-200 dark:border-slate-800 my-2" />
+
                     {navItems.map((item) => (
                         <NavLink
                             key={item.path}
