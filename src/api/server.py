@@ -2,7 +2,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import time
@@ -31,11 +31,23 @@ class TransactionModel(BaseModel):
     sender: str
     recipient: str
     amount: float
+    
+class ServerError(Exception):
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        self.message = message
+    
+@app.exception_handler(ServerError)
+async def server_error_handler(_, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message}
+    )
 
 @app.get("/status")
 async def get_status():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     height = node.blockchain.get_height()
     return {
@@ -52,7 +64,7 @@ async def get_status():
 @app.get("/blocks")
 async def get_blocks(start: int = 0, limit: int = 10):
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     height = node.blockchain.get_height()
     # Adjust start to be 0-indexed logic if needed, but blockchain usually 0-indexed
@@ -76,11 +88,11 @@ async def get_blocks(start: int = 0, limit: int = 10):
 @app.get("/blocks/{height}")
 async def get_block(height: int):
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     block = node.blockchain.get_block(height)
     if not block:
-        raise HTTPException(status_code=404, detail="Block not found")
+        raise ServerError(status_code=404, message="Block not found")
     
     return {
         "height": block.height,
@@ -103,7 +115,7 @@ async def get_block(height: int):
 @app.get("/mempool")
 async def get_mempool():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     txs = node.mempool.get_all_transactions()
     return [
@@ -120,7 +132,7 @@ async def get_mempool():
 @app.post("/submit")
 async def submit_transaction(tx_data: TransactionModel):
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     from src.common.crypto import hash_string
     
@@ -138,12 +150,12 @@ async def submit_transaction(tx_data: TransactionModel):
     if node.submit_transaction(tx):
         return {"status": "submitted", "tx_id": tx_id}
     else:
-        raise HTTPException(status_code=400, detail="Transaction rejected (duplicate?)")
+        raise ServerError(status_code=400, message="Transaction rejected (duplicate?)")
 
 @app.get("/transactions/{tx_id}")
 async def get_transaction_details(tx_id: str):
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # 1. Check Mempool
     tx = node.mempool.get_transaction(tx_id)
@@ -172,14 +184,14 @@ async def get_transaction_details(tx_id: str):
             "block_height": height
         }
         
-    raise HTTPException(status_code=404, detail="Transaction not found")
+    raise ServerError(status_code=404, message="Transaction not found")
 
 # --- Debug Endpoints ---
 
 @app.post("/debug/mempool/clear")
 async def clear_mempool():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Access private attribute directly for debug
     node.mempool.transactions.clear()
@@ -188,7 +200,7 @@ async def clear_mempool():
 @app.post("/debug/consensus/timeout")
 async def trigger_timeout():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Force a view change by manipulating last_block_time or similar?
     # Or just skip the current leader?
@@ -204,7 +216,7 @@ async def trigger_timeout():
 @app.post("/debug/network/disconnect")
 async def disconnect_network():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Close all connections
     count = len(node.network.connections)
@@ -221,7 +233,7 @@ async def disconnect_network():
 @app.post("/debug/network/reconnect")
 async def reconnect_network():
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Trigger connection logic
     node.network.connect_to_peers()
@@ -241,11 +253,11 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
         Dictionary with log entries and metadata
     """
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     log_file = node.config.get('logging.file', 'minichain.log')
     if not log_file:
-        raise HTTPException(status_code=404, detail="No log file configured")
+        raise ServerError(status_code=404, message="No log file configured")
     
     from pathlib import Path
     import os
@@ -263,7 +275,7 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
             log_path = Path(log_file)
     
     if not log_path.exists():
-        raise HTTPException(status_code=404, detail=f"Log file not found: {log_file}")
+        raise ServerError(status_code=404, message=f"Log file not found: {log_file}")
     
     try:
         # Read log file
@@ -326,7 +338,7 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading log file: {str(e)}")
+        raise ServerError(status_code=500, message=f"Error reading log file: {str(e)}")
 
 
 @app.get("/logs/stream")
@@ -341,11 +353,11 @@ async def stream_logs(level: Optional[str] = None):
         StreamingResponse with SSE format
     """
     if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+        raise ServerError(status_code=503, message="Node not initialized")
     
     log_file = node.config.get('logging.file', 'minichain.log')
     if not log_file:
-        raise HTTPException(status_code=404, detail="No log file configured")
+        raise ServerError(status_code=404, message="No log file configured")
     
     log_path = Path(log_file)
     
@@ -358,7 +370,7 @@ async def stream_logs(level: Optional[str] = None):
             log_path = Path(log_file)
     
     if not log_path.exists():
-        raise HTTPException(status_code=404, detail=f"Log file not found: {log_file}")
+        raise ServerError(status_code=404, message=f"Log file not found: {log_file}")
     
     async def generate_log_stream():
         """Generator function that yields log entries as SSE events."""
