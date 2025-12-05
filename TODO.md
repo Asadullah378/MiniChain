@@ -14,8 +14,8 @@
 ## 🚀 Backend Improvements
 
 ### API & Server (`src/api/server.py`)
-- [ ] **Structured Error Handling**: Replace generic `HTTPException` with a custom error handler to return consistent JSON error responses (e.g., `{"error": "code", "message": "..."}`).
-- [ ] **Remove Global State**: Refactor `server.py` to avoid using the global `node` variable. Pass the node instance via dependency injection or app state.
+- [x] **Structured Error Handling**: Replace generic `HTTPException` with a custom error handler to return consistent JSON error responses (e.g., `{"error": "code", "message": "..."}`).
+- [x] **Remove Global State**: Refactor `server.py` to avoid using the global `node` variable. Pass the node instance via dependency injection or app state.
 - [ ] **Disable Debug Endpoints**: specific `/debug/*` endpoints should be disabled in production or protected by a flag/auth.
 - [ ] **Pagination**: Implement proper pagination for `/blocks` and `/mempool` (currently hardcoded limit=10).
 - [ ] **Input Validation**: Enhance `TransactionModel` validation (e.g., prevent negative amounts, enforce address format).

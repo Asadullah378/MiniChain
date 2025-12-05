@@ -7,7 +7,7 @@ import os
 # Add src to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.api.server import app, node
+from src.api.server import app
 from src.node.node import Node
 from src.common.config import Config
 
@@ -47,9 +47,10 @@ def mock_node():
 
 @pytest.fixture
 def client(mock_node):
-    # Patch the global node variable in server.py
-    with patch('src.api.server.node', mock_node):
-        yield TestClient(app)
+    with patch('src.api.server.Node'):
+        with TestClient(app) as c:
+            app.state.node = mock_node
+            yield c
 
 def test_get_status(client, mock_node):
     response = client.get("/status")
