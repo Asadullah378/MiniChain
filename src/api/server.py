@@ -14,16 +14,6 @@ from pathlib import Path
 from src.node.node import Node
 from src.chain.block import Transaction
 
-app = FastAPI(title="MiniChain API")
-
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,8 +24,16 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
     app.state.node = None
 
-# 2. Register it when creating the App
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(title="MiniChain API", lifespan=lifespan)
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class TransactionModel(BaseModel):
     sender: str
