@@ -1,7 +1,9 @@
+import os
+from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 import threading
 import uvicorn
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, APIRouter, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
@@ -14,6 +16,7 @@ from pathlib import Path
 from src.node.node import Node
 from src.chain.block import Transaction
 
+load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,6 +28,8 @@ async def lifespan(app: FastAPI):
     app.state.node = None
 
 app = FastAPI(title="MiniChain API", lifespan=lifespan)
+
+debug_router = APIRouter(prefix="/debug", tags=["Debug"])
 
 # Enable CORS
 app.add_middleware(
@@ -196,7 +201,7 @@ async def get_transaction_details(tx_id: str):
 
 # --- Debug Endpoints ---
 
-@app.post("/debug/mempool/clear")
+@debug_router.post("/mempool/clear")
 async def clear_mempool():
     if not app.state.node:
         raise ServerError(status_code=503, message="Node not initialized")
@@ -205,7 +210,7 @@ async def clear_mempool():
     app.state.node.mempool.transactions.clear()
     return {"status": "mempool cleared"}
 
-@app.post("/debug/consensus/timeout")
+@debug_router.post("/consensus/timeout")
 async def trigger_timeout():
     if not app.state.node:
         raise ServerError(status_code=503, message="Node not initialized")
@@ -215,13 +220,13 @@ async def trigger_timeout():
     # For RoundRobinPoA, it's deterministic based on height.
     # To simulate a timeout, we might need to fake a "skip" or just wait.
     # Actually, RoundRobin doesn't really "timeout" in the same way PBFT does unless we implement view change.
-    # The current implementation (checked in app.state.node.py) has a placeholder _check_timeouts.
+    # The current implementation (checked in node.py) has a placeholder _check_timeouts.
     # So this might be a no-op unless we implement that logic.
     # Let's just log for now.
     app.state.node.logger.warning("DEBUG: Triggered timeout simulation (not fully implemented in consensus)")
     return {"status": "timeout triggered (check logs)"}
 
-@app.post("/debug/network/disconnect")
+@debug_router.post("/network/disconnect")
 async def disconnect_network():
     if not app.state.node:
         raise ServerError(status_code=503, message="Node not initialized")
@@ -238,7 +243,7 @@ async def disconnect_network():
     app.state.node.network.connections.clear()
     return {"status": "disconnected", "peers_removed": count}
 
-@app.post("/debug/network/reconnect")
+@debug_router.post("/network/reconnect")
 async def reconnect_network():
     if not app.state.node:
         raise ServerError(status_code=503, message="Node not initialized")
@@ -505,11 +510,15 @@ async def stream_logs(level: Optional[str] = None):
         }
     )
 
+if os.getenv("DEBUG_API", "false").lower() == "true":
+    app.include_router(debug_router)
 
 def start_api_server(node_instance: Node, port: int):
     """Start the API server."""
     app.state.node = node_instance
     
+    if os.getenv("DEBUG_API", "false").lower() == "true":
+        app.state.node.logger.warning("Debug API endpoints are enabled")
     # Run uvicorn
     # We run this in the main thread usually, but app.state.node.start() blocks.
     # So we'll run uvicorn in a thread or vice versa.
