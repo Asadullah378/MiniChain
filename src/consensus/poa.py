@@ -10,8 +10,7 @@ class RoundRobinPoA:
     """Round-robin Proof-of-Authority consensus."""
     
     def __init__(self, node_id: str, validator_ids: List[str], 
-                 block_interval: int = 5, proposal_timeout: int = 10,
-                 quorum_size: int = 2):
+                 block_interval: int = 5, proposal_timeout: int = 10):
         """
         Initialize PoA consensus.
         
@@ -20,13 +19,13 @@ class RoundRobinPoA:
             validator_ids: List of all validator node IDs (must include node_id)
             block_interval: Seconds between block proposals
             proposal_timeout: Seconds to wait for ACKs before timeout
-            quorum_size: Minimum number of ACKs needed (including proposer)
+        
+        Note: Quorum is now dynamic (all active validators) and managed by the Node class.
         """
         self.node_id = node_id
         self.validator_ids = sorted(validator_ids)  # Deterministic ordering
         self.block_interval = block_interval
         self.proposal_timeout = proposal_timeout
-        self.quorum_size = quorum_size
         
         if node_id not in validator_ids:
             raise ValueError(f"Node {node_id} must be in validator list")
@@ -97,31 +96,19 @@ class RoundRobinPoA:
             self.acks_received[height] = set()
         self.acks_received[height].add(voter_id)
     
-    def has_quorum(self, height: int) -> bool:
+    def get_ack_count(self, height: int) -> int:
         """
-        Check if we have enough ACKs for a block at given height.
+        Get the number of ACKs received for a block at given height.
         
         Args:
             height: Block height
         
         Returns:
-            True if quorum reached
+            Number of ACKs received
         """
         if height not in self.acks_received:
-            return False
-        
-        # Quorum includes the proposer (leader)
-        acks = self.acks_received[height]
-        leader = self.get_current_leader(height)
-        
-        # Count unique validators who ACKed (including leader if they self-ACK)
-        unique_voters = len(acks)
-        if leader in acks:
-            # Leader counts as 1 vote
-            return unique_voters >= self.quorum_size
-        else:
-            # Need quorum_size - 1 other validators + leader = quorum_size total
-            return unique_voters >= (self.quorum_size - 1)
+            return 0
+        return len(self.acks_received[height])
     
     def clear_acks(self, height: int):
         """Clear ACKs for a given height."""

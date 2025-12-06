@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { 
     Server, Database, Users, Activity, Send, Layers, Clock, 
-    Terminal, Pause, Play, Filter, Download, X, ChevronDown, ChevronUp, ArrowLeft, Maximize2, Minimize2 
+    Terminal, Pause, Play, Filter, Download, X, ChevronDown, ChevronUp, ArrowLeft, Maximize2, Minimize2, Power, Crown 
 } from 'lucide-react';
 import { getStatus, setApiBaseUrl, api } from '../api/client';
 import { nodes } from '../nodeConfig';
@@ -79,9 +79,39 @@ const NodePanel = ({ node, index }) => {
     const [showBlocks, setShowBlocks] = useState(false);
     const [showSendTx, setShowSendTx] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isShuttingDown, setIsShuttingDown] = useState(false);
+    const [isOffline, setIsOffline] = useState(false);
     const eventSourceRef = useRef(null);
     const containerRef = useRef(null);
     const fullscreenContainerRef = useRef(null);
+    
+    // Shutdown handler
+    const handleShutdown = async () => {
+        if (isShuttingDown || isOffline) return;
+        
+        const confirmed = window.confirm(`Are you sure you want to shut down ${node.name}? This will stop the node.`);
+        if (!confirmed) return;
+        
+        setIsShuttingDown(true);
+        try {
+            const response = await fetch(`${node.url}/shutdown`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (response.ok) {
+                setLogs(prev => [{
+                    timestamp: new Date().toISOString(),
+                    level: 'WARNING',
+                    message: 'Shutdown initiated...',
+                    raw: 'Shutdown initiated...'
+                }, ...prev]);
+            }
+        } catch (err) {
+            console.error('Shutdown request failed:', err);
+            // Node might have already shut down
+        }
+    };
 
     // Fetch status
     const fetchStatus = useCallback(async () => {
@@ -91,9 +121,15 @@ const NodePanel = ({ node, index }) => {
             const status = await getStatus();
             setNodeStatus(status);
             setApiBaseUrl(originalUrl);
+            // Node is online
+            setIsOffline(false);
+            setIsShuttingDown(false); // Reset shutdown state when node is back
             return status;
         } catch (err) {
             console.error(`Error fetching status for ${node.name}:`, err);
+            // Node is offline
+            setIsOffline(true);
+            setIsShuttingDown(false); // Reset shutdown state
             return null;
         }
     }, [node.url, node.name]);
@@ -133,8 +169,8 @@ const NodePanel = ({ node, index }) => {
                     try {
                         const entry = JSON.parse(event.data);
                         if (!entry.error) {
-                            // Collect initial batch (first 50 logs) and add them all at once
-                            if (!initialBatchSet && initialLogsBatch.length < 50) {
+                            // Collect initial batch (first 500 logs) and add them all at once
+                            if (!initialBatchSet && initialLogsBatch.length < 500) {
                                 initialLogsBatch.push(entry);
                                 
                                 if (initialBatchTimeout) {
@@ -160,7 +196,7 @@ const NodePanel = ({ node, index }) => {
                                 // After initial batch is set, add new logs normally to existing logs
                                 setLogs((prev) => {
                                     const newLogs = [entry, ...prev];
-                                    return newLogs.slice(0, 100); // Keep last 100 logs per node
+                                    return newLogs.slice(0, 500); // Keep last 500 logs per node
                                 });
 
                                 // Auto-scroll to top if at top (for both regular and fullscreen containers)
@@ -209,10 +245,22 @@ const NodePanel = ({ node, index }) => {
         setLogs([]);
     };
 
+    const isLeader = nodeStatus?.is_leader;
+    
     return (
-        <div className="flex flex-col h-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+        <div className={clsx(
+            "flex flex-col h-full border rounded-lg overflow-hidden",
+            isLeader 
+                ? "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 ring-2 ring-amber-400/50 dark:ring-amber-500/30" 
+                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+        )}>
             {/* Header */}
-            <div className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3">
+            <div className={clsx(
+                "border-b px-4 py-3",
+                isLeader 
+                    ? "bg-amber-100 dark:bg-amber-900/50 border-amber-200 dark:border-amber-800" 
+                    : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+            )}>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                         <div className={clsx(
@@ -220,6 +268,12 @@ const NodePanel = ({ node, index }) => {
                             isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
                         )} />
                         <h3 className="font-bold text-slate-900 dark:text-white">{node.name}</h3>
+                        {isLeader && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-200 dark:bg-amber-700 text-amber-800 dark:text-amber-200 rounded-full text-[10px] font-bold uppercase">
+                                <Crown className="w-3 h-3" />
+                                Leader
+                            </span>
+                        )}
                     </div>
                     <div className="flex items-center gap-1">
                         <button
@@ -253,26 +307,51 @@ const NodePanel = ({ node, index }) => {
             </div>
 
             {/* Status Cards */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-2">
-                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+            <div className={clsx(
+                "p-3 border-b grid grid-cols-2 gap-2",
+                isLeader 
+                    ? "bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800" 
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+            )}>
+                <div className={clsx(
+                    "p-2 rounded border",
+                    isLeader 
+                        ? "bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-700" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                )}>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Node ID</div>
                     <div className="text-xs font-mono font-bold text-slate-900 dark:text-white truncate" title={nodeStatus?.node_id}>
                         {nodeStatus?.node_id || '--'}
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                <div className={clsx(
+                    "p-2 rounded border",
+                    isLeader 
+                        ? "bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-700" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                )}>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Height</div>
                     <div className="text-xs font-bold text-slate-900 dark:text-white">
                         {nodeStatus?.height ?? '--'}
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                <div className={clsx(
+                    "p-2 rounded border",
+                    isLeader 
+                        ? "bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-700" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                )}>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Peers</div>
                     <div className="text-xs font-bold text-slate-900 dark:text-white">
-                        {nodeStatus?.peers ?? '--'}
+                        {nodeStatus?.active_peers ?? nodeStatus?.peers ?? '--'}
                     </div>
                 </div>
-                <div className="bg-white dark:bg-slate-900 p-2 rounded border border-slate-200 dark:border-slate-700">
+                <div className={clsx(
+                    "p-2 rounded border",
+                    isLeader 
+                        ? "bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-700" 
+                        : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                )}>
                     <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase">Mempool</div>
                     <div className="text-xs font-bold text-slate-900 dark:text-white">
                         {nodeStatus?.mempool_size ?? '--'}
@@ -281,7 +360,12 @@ const NodePanel = ({ node, index }) => {
             </div>
 
             {/* Action Buttons */}
-            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700 flex gap-2">
+            <div className={clsx(
+                "p-2 border-b flex gap-2",
+                isLeader 
+                    ? "bg-amber-50/50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800" 
+                    : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+            )}>
                 <button
                     onClick={() => setShowMempool(true)}
                     className="flex-1 px-2 py-1.5 bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-400 rounded text-xs font-medium hover:bg-blue-200 dark:hover:bg-blue-500/30 transition-colors flex items-center justify-center gap-1"
@@ -302,6 +386,20 @@ const NodePanel = ({ node, index }) => {
                 >
                     <Send className="w-3 h-3" />
                     Send
+                </button>
+                <button
+                    onClick={handleShutdown}
+                    disabled={isShuttingDown || isOffline}
+                    className={clsx(
+                        "flex-1 px-2 py-1.5 rounded text-xs font-medium transition-colors flex items-center justify-center gap-1",
+                        (isShuttingDown || isOffline)
+                            ? "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed"
+                            : "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-500/30"
+                    )}
+                    title={isOffline ? "Node is offline" : "Shutdown node"}
+                >
+                    <Power className="w-3 h-3" />
+                    {isShuttingDown ? 'Stopping...' : (isOffline ? 'Offline' : 'Shutdown')}
                 </button>
             </div>
 
@@ -324,7 +422,12 @@ const NodePanel = ({ node, index }) => {
             </div>
 
             {/* Footer */}
-            <div className="bg-slate-50 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-3 py-1.5 flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-400">
+            <div className={clsx(
+                "border-t px-3 py-1.5 flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-400",
+                isLeader 
+                    ? "bg-amber-50 dark:bg-amber-900/30 border-amber-200 dark:border-amber-800" 
+                    : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+            )}>
                 <span className="font-mono">{logs.length} logs</span>
                 <span className="font-mono">{isPaused ? '⏸' : '▶'}</span>
             </div>

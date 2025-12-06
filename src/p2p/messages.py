@@ -31,6 +31,11 @@ class MessageType(Enum):
     PEERLIST = "PEERLIST"
     HEARTBEAT = "HEARTBEAT"
     STATUS = "STATUS"
+    
+    # Sync and recovery
+    SYNC_REQUEST = "SYNC_REQUEST"
+    SYNC_RESPONSE = "SYNC_RESPONSE"
+    MEMPOOL_SYNC = "MEMPOOL_SYNC"
 
 
 @dataclass
@@ -149,14 +154,17 @@ class Message:
         )
     
     @classmethod
-    def create_heartbeat(cls, sender_id: str, height: int, last_block_hash: bytes) -> 'Message':
-        """Create a HEARTBEAT message."""
+    def create_heartbeat(cls, sender_id: str, height: int, last_block_hash: bytes,
+                        current_view: int = 0, failed_validators: list = None) -> 'Message':
+        """Create a HEARTBEAT message with view and failed validators info."""
         return cls(
             type=MessageType.HEARTBEAT,
             sender_id=sender_id,
             payload={
                 'height': height,
-                'last_block_hash': last_block_hash.hex()
+                'last_block_hash': last_block_hash.hex(),
+                'current_view': current_view,
+                'failed_validators': failed_validators or []
             }
         )
     
@@ -203,5 +211,62 @@ class Message:
             sender_id=sender_id,
             payload={
                 'block': block
+            }
+        )
+    
+    @classmethod
+    def create_viewchange(cls, sender_id: str, new_view: int, height: int, 
+                          failed_leader: str, reason: str) -> 'Message':
+        """Create a VIEWCHANGE message."""
+        return cls(
+            type=MessageType.VIEWCHANGE,
+            sender_id=sender_id,
+            payload={
+                'new_view': new_view,
+                'height': height,
+                'failed_leader': failed_leader,
+                'reason': reason
+            }
+        )
+    
+    @classmethod
+    def create_sync_request(cls, sender_id: str, my_height: int, 
+                            my_latest_hash: str) -> 'Message':
+        """Create a SYNC_REQUEST message."""
+        return cls(
+            type=MessageType.SYNC_REQUEST,
+            sender_id=sender_id,
+            payload={
+                'height': my_height,
+                'latest_hash': my_latest_hash
+            }
+        )
+    
+    @classmethod
+    def create_sync_response(cls, sender_id: str, height: int, 
+                             latest_hash: str, blocks: List[Dict[str, Any]],
+                             current_view: int = 0, failed_validators: list = None) -> 'Message':
+        """Create a SYNC_RESPONSE message with view and failed validators info."""
+        return cls(
+            type=MessageType.SYNC_RESPONSE,
+            sender_id=sender_id,
+            payload={
+                'height': height,
+                'latest_hash': latest_hash,
+                'blocks': blocks,
+                'current_view': current_view,
+                'failed_validators': failed_validators or []
+            }
+        )
+    
+    @classmethod
+    def create_mempool_sync(cls, sender_id: str, 
+                            transactions: List[Dict[str, Any]]) -> 'Message':
+        """Create a MEMPOOL_SYNC message."""
+        return cls(
+            type=MessageType.MEMPOOL_SYNC,
+            sender_id=sender_id,
+            payload={
+                'transactions': transactions
             }
         )

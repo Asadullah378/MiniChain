@@ -3,7 +3,9 @@
 import threading
 import time
 import socket
-from typing import Optional, List, Dict
+import os
+import signal
+from typing import Optional, List, Dict, Set
 from src.common.config import Config
 from src.common.logger import setup_logger
 from src.chain.blockchain import Blockchain
@@ -35,14 +37,38 @@ class Node:
             console=config.get('logging.console', True) and not disable_console_logging
         )
         
-        # Track ACKs sent to prevent duplicates
-        self.acks_sent: Dict[int, bool] = {}  # height -> whether ACK was sent
+        # Track ACKs sent to prevent duplicates - now tracked by (height, leader) pair
+        self.acks_sent: Dict[str, bool] = {}  # "height:leader" -> whether ACK was sent
         
         # Track COMMIT messages being processed to prevent duplicates
         self.commits_processing: Dict[int, bool] = {}  # height -> whether COMMIT is being processed
         
         # Track COMMIT messages broadcast by leader to prevent duplicates
         self.commits_broadcast: Dict[int, bool] = {}  # height -> whether COMMIT was broadcast
+        
+        # Track active validators (for view change)
+        self.active_validators: Set[str] = set()
+        self.failed_validators: Set[str] = set()
+        
+        # View change tracking
+        self.current_view = 0  # View number for leader election
+        self.view_change_votes: Dict[int, Set[str]] = {}  # view -> set of voters
+        self.view_change_lock = threading.Lock()
+        self.view_change_in_progress = False  # Prevent multiple simultaneous view changes
+        self.last_view_change_time = 0  # Cooldown for view changes
+        self.view_change_cooldown = 15  # Minimum seconds between view changes
+        self.view_change_initiated_for: Set[str] = set()  # Track which leaders we've initiated view change for
+        
+        # Sync and recovery state
+        self.syncing = False
+        self.sync_lock = threading.Lock()
+        self.is_recovering = True  # True until initial sync is complete
+        self.recovery_start_time = time.time()
+        self.recovery_grace_period = 30  # Seconds to wait before running health checks
+        self.initial_sync_complete = False
+        
+        # Shutdown flag
+        self.shutdown_requested = False
         
         # Initialize components
         self.blockchain = Blockchain(data_dir=config.get_data_dir())
@@ -123,29 +149,36 @@ class Node:
         self.logger.info(f"Using consensus node_id: {consensus_node_id}")
         
         # Use the matched node_id for consensus
+        # Note: quorum is now dynamic (all active validators), not from config
         self.consensus = RoundRobinPoA(
             node_id=consensus_node_id,  # Must be in validator_ids
             validator_ids=validator_ids,
             block_interval=config.get('consensus.block_interval', 5),
-            proposal_timeout=config.get('consensus.proposal_timeout', 10),
-            quorum_size=config.get('consensus.quorum_size', 2)
+            proposal_timeout=config.get('consensus.proposal_timeout', 10)
         )
         
         # Update consensus height from blockchain
         self.consensus.current_height = self.blockchain.get_height()
         
-        # Initialize network manager
+        # Initialize network manager with failure/recovery callbacks
         self.network = NetworkManager(
             node_id=config.get_node_id(),
             hostname=config.get_hostname(),
             port=config.get_port(),
             peers=config.get_peers(),
             message_handler=self._handle_message,
-            logger=self.logger
+            logger=self.logger,
+            failure_callback=self._on_peer_failure,
+            recovery_callback=self._on_peer_recovery,
+            is_recovering_check=self._is_still_recovering  # New: check if we should skip failure detection
         )
         
         self.running = False
         self.consensus_thread: Optional[threading.Thread] = None
+        self.heartbeat_thread: Optional[threading.Thread] = None
+        
+        # Initialize active validators with all validators
+        self.active_validators = set(validator_ids)
         
         # Clean up old ACK tracking entries periodically (keep only last 10 heights)
         self._cleanup_old_acks()
@@ -180,7 +213,7 @@ class Node:
         self.logger.info(f"Initial blockchain height: {self.blockchain.get_height()}")
         self.logger.info(f"Initial mempool size: {self.mempool.size()}")
         self.logger.info(f"Validators: {self.consensus.validator_ids}")
-        self.logger.info(f"Quorum size: {self.consensus.quorum_size}, Block interval: {self.consensus.block_interval}s")
+        self.logger.info(f"Quorum: dynamic (all active validators), Block interval: {self.consensus.block_interval}s")
         
         self.running = True
         
@@ -195,8 +228,41 @@ class Node:
         self.consensus_thread.start()
         self.logger.info("Consensus loop started")
         
+        # Start heartbeat sender
+        self.logger.info("Starting heartbeat sender...")
+        self.heartbeat_thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self.heartbeat_thread.start()
+        self.logger.info("Heartbeat sender started")
+        
         self.logger.info(f"Node started successfully. Current height: {self.blockchain.get_height()}")
         self.logger.info("Node is running. Press Ctrl+C to stop.")
+        
+        # Start recovery/sync process
+        self.logger.info("Starting initial state sync with peers...")
+        self.logger.info(f"My initial state: height={self.blockchain.get_height()}, view={self.current_view}")
+        self.logger.info(f"Recovery mode: health checks disabled for {self.recovery_grace_period}s")
+        
+        # Start sync process in background
+        def recovery_sync():
+            time.sleep(3)  # Wait for connections to be established
+            if self.running:
+                self.logger.info(f"[RECOVERY] Sending sync request (height={self.blockchain.get_height()}, view={self.current_view})")
+                self._request_sync()
+            
+            time.sleep(5)  # Wait for responses
+            if self.running:
+                self.logger.info(f"[RECOVERY] Current state: height={self.blockchain.get_height()}, view={self.current_view}")
+                self.logger.info(f"[RECOVERY] Sending follow-up sync request...")
+                self._request_sync()
+            
+            time.sleep(5)  # Wait for more responses
+            if self.running:
+                self.logger.info(f"[RECOVERY] Final state before completing: height={self.blockchain.get_height()}, view={self.current_view}")
+                self.logger.info(f"[RECOVERY] Active validators: {list(self.active_validators)}")
+                self.logger.info(f"[RECOVERY] Effective leader for next height: {self.get_effective_leader(self.blockchain.get_height() + 1)}")
+                self._complete_recovery()
+        
+        threading.Thread(target=recovery_sync, daemon=True).start()
         
         # Keep main thread alive
         try:
@@ -218,9 +284,17 @@ class Node:
         """Clean up old ACK tracking entries to prevent memory leaks."""
         current_height = self.blockchain.get_height()
         # Keep only ACK tracking for heights within last 10 blocks
-        heights_to_remove = [h for h in self.acks_sent.keys() if h < current_height - 10]
-        for h in heights_to_remove:
-            del self.acks_sent[h]
+        # Key format is "height:leader"
+        keys_to_remove = []
+        for key in self.acks_sent.keys():
+            try:
+                height = int(key.split(':')[0])
+                if height < current_height - 10:
+                    keys_to_remove.append(key)
+            except (ValueError, IndexError):
+                keys_to_remove.append(key)  # Remove malformed keys
+        for key in keys_to_remove:
+            del self.acks_sent[key]
         
         # Also cleanup COMMIT processing flags
         heights_to_remove_commits = [h for h in self.commits_processing.keys() if h < current_height - 10]
@@ -232,6 +306,218 @@ class Node:
         for h in heights_to_remove_broadcast:
             del self.commits_broadcast[h]
     
+    def _heartbeat_loop(self):
+        """Periodically broadcast heartbeat to peers with view and state info."""
+        while self.running:
+            try:
+                height = self.blockchain.get_height()
+                last_hash = self.blockchain.get_latest_hash()
+                # Include view and failed validators for state sync
+                self.network.broadcast_heartbeat(
+                    height, 
+                    last_hash,
+                    self.current_view,
+                    list(self.failed_validators)
+                )
+                time.sleep(3)  # Heartbeat every 3 seconds
+            except Exception as e:
+                if self.running:
+                    self.logger.error(f"Error in heartbeat loop: {e}")
+                time.sleep(1)
+    
+    def _on_peer_failure(self, peer_hostname: str):
+        """Handle peer failure detection."""
+        # Skip if we're still recovering - we don't know the real state yet
+        if self.is_recovering:
+            self.logger.debug(f"Ignoring peer failure for {peer_hostname} - still in recovery mode")
+            return
+        
+        # Normalize hostname for matching
+        short_hostname = peer_hostname.split('.')[0]
+        matched_validator = None
+        
+        for validator in list(self.active_validators):
+            if validator == peer_hostname or validator.split('.')[0] == short_hostname:
+                matched_validator = validator
+                break
+        
+        if not matched_validator:
+            # Already removed or not a validator
+            return
+        
+        # Check if already marked as failed
+        if matched_validator in self.failed_validators:
+            return
+        
+        self.logger.warning(f"Peer failure detected: {matched_validator}")
+        self.active_validators.discard(matched_validator)
+        self.failed_validators.add(matched_validator)
+        self.logger.warning(f"Removed {matched_validator} from active validators")
+        self.logger.info(f"Active validators: {list(self.active_validators)}")
+        
+        # Check if the failed peer is the effective leader (accounts for view changes)
+        next_height = self.blockchain.get_height() + 1
+        effective_leader = self.get_effective_leader(next_height)
+        
+        leader_short = effective_leader.split('.')[0]
+        is_leader_failed = (matched_validator == effective_leader or 
+                           short_hostname == leader_short)
+        
+        if is_leader_failed:
+            # Clear ACK tracking for current height + failed leader since leader failed
+            # Key format is "height:leader"
+            ack_key = f"{next_height}:{matched_validator}"
+            if ack_key in self.acks_sent:
+                del self.acks_sent[ack_key]
+                self.logger.debug(f"Cleared ACK tracking for {ack_key} due to leader failure")
+            
+            # Clear pending proposal from failed leader
+            if self.consensus.pending_proposal and self.consensus.pending_proposal.height == next_height:
+                self.consensus.pending_proposal = None
+                self.logger.debug(f"Cleared pending proposal from failed leader")
+            
+            # Only initiate view change if we haven't already done so for this leader
+            if matched_validator not in self.view_change_initiated_for:
+                self.logger.warning(f"Failed peer {matched_validator} is the current leader! Initiating view change...")
+                self._initiate_view_change(next_height, matched_validator, "leader_failure")
+            else:
+                self.logger.debug(f"View change already initiated for {matched_validator}, skipping")
+    
+    def _on_peer_recovery(self, peer_hostname: str):
+        """Handle peer recovery detection."""
+        self.logger.info(f"Peer recovery detected via network: {peer_hostname}")
+        
+        # Normalize hostname for matching
+        short_hostname = peer_hostname.split('.')[0]
+        matched_validator = None
+        
+        for validator in self.consensus.validator_ids:
+            if validator == peer_hostname or validator.split('.')[0] == short_hostname:
+                matched_validator = validator
+                break
+        
+        if matched_validator:
+            # Only process if this is actually a recovery (was previously failed)
+            if matched_validator in self.failed_validators:
+                # Add back to active validators - they're communicating again
+                self.failed_validators.discard(matched_validator)
+                self.active_validators.add(matched_validator)
+                
+                # Clear the view change flag so we can handle future failures
+                self.view_change_initiated_for.discard(matched_validator)
+                
+                self.logger.info(f"Peer {matched_validator} recovered and added back to active validators")
+                self.logger.info(f"Active validators: {list(self.active_validators)}")
+    
+    def _initiate_view_change(self, height: int, failed_leader: str, reason: str):
+        """Initiate a view change due to leader failure."""
+        with self.view_change_lock:
+            # Check cooldown
+            current_time = time.time()
+            if current_time - self.last_view_change_time < self.view_change_cooldown:
+                self.logger.debug(f"View change cooldown active, skipping (wait {self.view_change_cooldown - (current_time - self.last_view_change_time):.1f}s)")
+                return
+            
+            # Check if already in progress
+            if self.view_change_in_progress:
+                self.logger.debug("View change already in progress, skipping")
+                return
+            
+            # Mark this leader as having view change initiated
+            self.view_change_initiated_for.add(failed_leader)
+            self.view_change_in_progress = True
+            
+            new_view = self.current_view + 1
+            
+            # Broadcast view change
+            self.network.broadcast_viewchange(new_view, height, failed_leader, reason)
+            
+            # Vote for the view change ourselves
+            if new_view not in self.view_change_votes:
+                self.view_change_votes[new_view] = set()
+            self.view_change_votes[new_view].add(self.config.get_hostname())
+            
+            self.logger.info(f"Initiated view change to view {new_view} for height {height}")
+            
+            # Reset in_progress flag after a timeout (in case view change doesn't complete)
+            def reset_view_change_flag():
+                time.sleep(self.view_change_cooldown)
+                with self.view_change_lock:
+                    self.view_change_in_progress = False
+            threading.Thread(target=reset_view_change_flag, daemon=True).start()
+    
+    def _request_sync(self):
+        """Request sync from peers."""
+        with self.sync_lock:
+            if self.syncing:
+                return
+            self.syncing = True
+        
+        try:
+            height = self.blockchain.get_height()
+            latest_hash = self.blockchain.get_latest_hash().hex()
+            self.logger.info(f"Requesting sync from peers (my height: {height})")
+            self.network.broadcast_sync_request(height, latest_hash)
+        finally:
+            # Reset sync flag after a delay
+            def reset_sync():
+                time.sleep(5)
+                with self.sync_lock:
+                    self.syncing = False
+            threading.Thread(target=reset_sync, daemon=True).start()
+    
+    def _is_still_recovering(self) -> bool:
+        """Check if this node is still in recovery mode (should skip health checks)."""
+        if not self.is_recovering:
+            return False
+        
+        # Check if grace period has passed
+        elapsed = time.time() - self.recovery_start_time
+        if elapsed > self.recovery_grace_period:
+            if self.is_recovering:
+                self.logger.info(f"Recovery grace period ({self.recovery_grace_period}s) elapsed - enabling health checks")
+                self.is_recovering = False
+            return False
+        
+        return True
+    
+    def _complete_recovery(self):
+        """Mark recovery as complete and enable normal operations."""
+        if self.is_recovering:
+            self.is_recovering = False
+            self.initial_sync_complete = True
+            self.logger.info("Initial sync complete - node is now fully operational")
+            self.logger.info(f"State: height={self.blockchain.get_height()}, view={self.current_view}, active_validators={list(self.active_validators)}")
+    
+    def get_active_validators(self) -> List[str]:
+        """Get list of currently active validators."""
+        return sorted(list(self.active_validators))
+    
+    def get_effective_leader(self, height: int) -> str:
+        """Get the effective leader for a height, skipping failed validators."""
+        active = self.get_active_validators()
+        if not active:
+            # Fallback to all validators if none active
+            active = self.consensus.validator_ids
+        
+        # Round-robin among active validators
+        # Adjust index based on view changes
+        adjusted_height = height + self.current_view
+        return active[adjusted_height % len(active)]
+    
+    def request_shutdown(self):
+        """Request graceful shutdown of the node."""
+        self.logger.info("Shutdown requested...")
+        self.shutdown_requested = True
+        self.stop()
+        
+        # Give time for cleanup
+        time.sleep(1)
+        
+        # Force exit
+        self.logger.info("Forcing process exit...")
+        os._exit(0)
+    
     def _consensus_loop(self):
         """Main consensus loop running in background thread."""
         self.logger.info("Consensus loop started")
@@ -240,19 +526,34 @@ class Node:
                 current_height = self.blockchain.get_height()
                 next_height = current_height + 1
                 
-                # Check current leader
-                current_leader = self.consensus.get_current_leader(next_height)
-                is_leader = self.consensus.is_leader(next_height)
+                # Use effective leader (accounts for view changes and failed validators)
+                effective_leader = self.get_effective_leader(next_height)
+                my_hostname = self.config.get_hostname()
+                my_short = my_hostname.split('.')[0]
+                leader_short = effective_leader.split('.')[0]
                 
-                if is_leader:
-                    self.logger.debug(f"I am the leader for height {next_height}")
+                is_effective_leader = (my_hostname == effective_leader or my_short == leader_short)
+                
+                if is_effective_leader:
+                    self.logger.debug(f"I am the effective leader for height {next_height}")
                 else:
-                    self.logger.debug(f"Current leader for height {next_height}: {current_leader}")
+                    self.logger.debug(f"Effective leader for height {next_height}: {effective_leader}")
                 
-                # Check if we should propose
-                if self.consensus.should_propose():
-                    self.logger.info(f"Block interval elapsed, checking if proposal needed for height {next_height}")
+                # Check if we should propose (using effective leader logic)
+                # Only propose if:
+                # 1. We are the effective leader
+                # 2. Block interval has elapsed
+                # 3. No pending proposal waiting for ACKs
+                elapsed = time.time() - self.consensus.last_block_time
+                has_pending = (self.consensus.pending_proposal is not None and 
+                              self.consensus.pending_proposal.height == next_height)
+                should_propose = is_effective_leader and elapsed >= self.consensus.block_interval and not has_pending
+                
+                if should_propose:
+                    self.logger.info(f"Block interval elapsed, I am the effective leader - proposing for height {next_height}")
                     self._try_propose_block(next_height)
+                elif is_effective_leader and has_pending:
+                    self.logger.debug(f"Already have pending proposal for height {next_height}, waiting for ACKs")
                 
                 # Check for timeouts
                 self._check_timeouts(next_height)
@@ -263,25 +564,43 @@ class Node:
                 time.sleep(1)
     
     def _try_propose_block(self, height: int):
-        """Try to propose a new block if we're the leader."""
-        if not self.consensus.is_leader(height):
-            self.logger.debug(f"Not leader for height {height}, skipping proposal")
+        """Try to propose a new block if we're the effective leader."""
+        # Use effective leader (accounts for view changes and failed validators)
+        effective_leader = self.get_effective_leader(height)
+        my_hostname = self.config.get_hostname()
+        my_short = my_hostname.split('.')[0]
+        leader_short = effective_leader.split('.')[0]
+        
+        is_effective_leader = (my_hostname == effective_leader or my_short == leader_short)
+        
+        if not is_effective_leader:
+            self.logger.debug(f"Not effective leader for height {height}, skipping proposal")
             return
         
-        self.logger.info(f"Creating block proposal for height {height}...")
+        # Check if we already have a pending proposal for this height
+        if self.consensus.pending_proposal is not None and self.consensus.pending_proposal.height == height:
+            self.logger.debug(f"Already have pending proposal for height {height}, waiting for ACKs")
+            return
+        
+        self.logger.info(f"Creating block proposal for height {height} (I am effective leader)...")
         prev_hash = self.blockchain.get_latest_hash()
         self.logger.debug(f"Previous block hash: {prev_hash.hex()[:16]}...")
         self.logger.debug(f"Mempool has {self.mempool.size()} transactions available")
         
-        block = self.consensus.create_proposal(
-            self.mempool,
-            prev_hash,
-            max_txs=self.config.get('blockchain.max_block_size', 100)
-        )
-        
-        if block is None:
+        # Get transactions from mempool
+        txs = self.mempool.get_transactions(self.config.get('blockchain.max_block_size', 100))
+        if not txs:
             self.logger.info(f"No transactions in mempool to propose for height {height}")
             return
+        
+        # Create block with our hostname as proposer
+        block = Block(
+            height=height,
+            prev_hash=prev_hash,
+            transactions=txs,
+            timestamp=time.time(),
+            proposer_id=my_hostname  # Use our hostname as proposer
+        )
         
         tx_count = len(block.transactions)
         self.logger.info(f"Created block proposal for height {height}: {tx_count} transaction(s), hash: {block.block_hash.hex()[:16]}...")
@@ -293,11 +612,43 @@ class Node:
         self.logger.info(f"Broadcasting PROPOSE message for height {height} to all peers...")
         self.network.broadcast_propose(block)
         self.logger.info(f"PROPOSE message for height {height} broadcasted successfully")
+        
+        # Leader self-ACKs (counts towards quorum)
+        # Use the matching validator ID from active_validators for consistency
+        my_short = my_hostname.split('.')[0]
+        my_validator_id = my_hostname
+        for validator in self.active_validators:
+            if validator == my_hostname or validator.split('.')[0] == my_short:
+                my_validator_id = validator
+                break
+        self.consensus.add_ack(height, my_validator_id)
+        self.logger.info(f"Leader self-ACK added for height {height} (validator: {my_validator_id})")
     
     def _check_timeouts(self, expected_height: int):
         """Check for consensus timeouts and trigger view change if needed."""
-        # This is a simplified version - full implementation would track proposal times
-        pass
+        # Get the effective leader (accounts for view changes)
+        effective_leader = self.get_effective_leader(expected_height)
+        elapsed = time.time() - self.consensus.last_block_time
+        
+        # If block interval + proposal timeout has passed without a block
+        timeout_threshold = self.consensus.block_interval + self.consensus.proposal_timeout
+        
+        if elapsed > timeout_threshold:
+            # Check if the effective leader is in our failed validators list
+            short_leader = effective_leader.split('.')[0]
+            leader_failed = False
+            matched_failed = None
+            for failed in self.failed_validators:
+                if failed == effective_leader or failed.split('.')[0] == short_leader:
+                    leader_failed = True
+                    matched_failed = failed
+                    break
+            
+            if leader_failed and matched_failed:
+                # Only initiate view change if not already initiated for this leader
+                if matched_failed not in self.view_change_initiated_for:
+                    self.logger.warning(f"Timeout waiting for proposal from failed leader {effective_leader}")
+                    self._initiate_view_change(expected_height, matched_failed, "proposal_timeout")
     
     def _handle_message(self, message, peer_address):
         """Handle incoming messages from network."""
@@ -306,6 +657,20 @@ class Node:
             sender_id = message.sender_id
             
             self.logger.debug(f"Received {msg_type.value} message from {sender_id} ({peer_address})")
+            
+            # Check if sender is a failed validator that's now back online
+            # (Receiving any message means they're alive and functioning)
+            # But only do this if we're NOT recovering ourselves
+            if not self.is_recovering:
+                sender_short = sender_id.split('.')[0]
+                for validator in list(self.failed_validators):
+                    if validator == sender_id or validator.split('.')[0] == sender_short:
+                        self.logger.info(f"Received {msg_type.value} from previously-failed validator {validator} - re-activating")
+                        self.failed_validators.discard(validator)
+                        self.active_validators.add(validator)
+                        self.network.record_heartbeat(sender_id)
+                        self.logger.info(f"Re-activated {validator}, active validators: {list(self.active_validators)}")
+                        break
             
             if msg_type.value == "TX":
                 self._handle_tx(message)
@@ -317,6 +682,14 @@ class Node:
                 self._handle_commit(message)
             elif msg_type.value == "HEARTBEAT":
                 self._handle_heartbeat(message)
+            elif msg_type.value == "VIEWCHANGE":
+                self._handle_viewchange(message)
+            elif msg_type.value == "SYNC_REQUEST":
+                self._handle_sync_request(message, peer_address)
+            elif msg_type.value == "SYNC_RESPONSE":
+                self._handle_sync_response(message)
+            elif msg_type.value == "MEMPOOL_SYNC":
+                self._handle_mempool_sync(message)
             elif msg_type.value == "GETHEADERS":
                 self._handle_getheaders(message, peer_address)
             elif msg_type.value == "GETBLOCKS":
@@ -409,18 +782,20 @@ class Node:
             
             # Store pending proposal
             self.consensus.pending_proposal = block
-            self.logger.info(f" Valid proposal received for height {height}, stored as pending proposal")
             
             # Send ACK directly to leader only (prevent duplicate ACKs)
+            # Track ACKs by (height, leader) so we can send ACK to a new leader after view change
             leader_hostname = proposer_id  # The proposer is the leader
-            if height not in self.acks_sent or not self.acks_sent[height]:
-                self.acks_sent[height] = True
-                self.logger.info(f" ACKing proposal at height {height} to leader {leader_hostname}")
+            ack_key = f"{height}:{leader_hostname}"
+            
+            if ack_key not in self.acks_sent or not self.acks_sent[ack_key]:
+                self.acks_sent[ack_key] = True
+                self.logger.info(f"Valid proposal received for height {height} from {leader_hostname}, sending ACK")
                 self.logger.debug(f"   Block hash: {block.block_hash.hex()[:16]}..., Transactions: {len(block.transactions)}")
                 self.network.send_ack(height, block.block_hash, self.config.get_hostname(), leader_hostname)
-                self.logger.info(f" ACK for height {height} sent to leader {leader_hostname}")
+                self.logger.info(f"ACK for height {height} sent to leader {leader_hostname}")
             else:
-                self.logger.debug(f" Already sent ACK for height {height}, skipping duplicate")
+                self.logger.debug(f"Already sent ACK for height {height} to {leader_hostname}, skipping duplicate")
         
         except Exception as e:
             self.logger.error(f"Error handling proposal: {e}", exc_info=True)
@@ -434,24 +809,44 @@ class Node:
             block_hash_hex = payload.get('block_hash', 'unknown')
             sender_id = message.sender_id
             
-            self.logger.debug(f" Received ACK message from {sender_id} (voter: {voter_id}) for height {height}")
+            self.logger.debug(f"Received ACK message from {sender_id} (voter: {voter_id}) for height {height}")
             
-            # Only process ACKs if we're the leader for this height
-            expected_leader = self.consensus.get_current_leader(height)
+            # Only process ACKs if we're the EFFECTIVE leader for this height
+            # (accounts for view changes and failed validators)
+            effective_leader = self.get_effective_leader(height)
             my_hostname = self.config.get_hostname()
+            my_short = my_hostname.split('.')[0]
+            leader_short = effective_leader.split('.')[0]
             
-            if expected_leader != my_hostname:
-                # We're not the leader, ignore this ACK
-                self.logger.debug(f" Received ACK for height {height} but we're not the leader (leader: {expected_leader}), ignoring")
+            is_effective_leader = (my_hostname == effective_leader or my_short == leader_short)
+            
+            if not is_effective_leader:
+                # We're not the effective leader, ignore this ACK
+                self.logger.debug(f"Received ACK for height {height} but we're not the effective leader (leader: {effective_leader}), ignoring")
                 return
             
-            # We're the leader, process the ACK
-            self.consensus.add_ack(height, voter_id)
-            acks_count = len(self.consensus.acks_received.get(height, set()))
-            self.logger.info(f" Received ACK from {voter_id} for height {height} (total ACKs: {acks_count}/{self.consensus.quorum_size})")
+            # We're the effective leader, process the ACK
+            # Normalize voter_id to match active validators format
+            voter_short = voter_id.split('.')[0]
+            normalized_voter = voter_id
+            for validator in self.active_validators:
+                if validator == voter_id or validator.split('.')[0] == voter_short:
+                    normalized_voter = validator
+                    break
             
-            # Check if we have quorum (only leader checks)
-            if self.consensus.has_quorum(height):
+            self.consensus.add_ack(height, normalized_voter)
+            acks_received = self.consensus.acks_received.get(height, set())
+            acks_count = len(acks_received)
+            
+            # Dynamic quorum: all active validators must ACK
+            # This includes all active peers + ourselves (the leader)
+            dynamic_quorum = len(self.active_validators)
+            self.logger.info(f"Received ACK from {voter_id} (normalized: {normalized_voter}) for height {height} (total ACKs: {acks_count}/{dynamic_quorum})")
+            self.logger.debug(f"ACKs received so far: {list(acks_received)}")
+            self.logger.debug(f"Active validators: {list(self.active_validators)}")
+            
+            # Check if we have quorum (all active validators)
+            if acks_count >= dynamic_quorum:
                 # Check if we've already committed this block (prevent duplicate commits)
                 current_height = self.blockchain.get_height()
                 if current_height >= height:
@@ -477,7 +872,7 @@ class Node:
                     return
                 
                 acks_count = len(self.consensus.acks_received.get(height, set()))
-                self.logger.info(f" QUORUM REACHED for height {height}! (ACKs: {acks_count}/{self.consensus.quorum_size})")
+                self.logger.info(f"QUORUM REACHED for height {height}! (ACKs: {acks_count}/{dynamic_quorum})")
                 self.logger.info(f" Committing block {height} to blockchain...")
                 if self.consensus.pending_proposal:
                     # Save block hash before on_block_committed clears pending_proposal
@@ -498,9 +893,11 @@ class Node:
                         self.consensus.on_block_committed(height)
                         self.logger.debug(f" Consensus state updated: current_height={self.consensus.current_height}")
                         
-                        # Clear ACK tracking for this height and cleanup old entries
-                        if height in self.acks_sent:
-                            del self.acks_sent[height]
+                        # Clear ACK tracking for this height (all leaders) and cleanup old entries
+                        # Key format is "height:leader"
+                        keys_to_clear = [k for k in self.acks_sent.keys() if k.startswith(f"{height}:")]
+                        for key in keys_to_clear:
+                            del self.acks_sent[key]
                         self._cleanup_old_acks()
                         
                         # Broadcast COMMIT - use hostname for consistency
@@ -538,7 +935,7 @@ class Node:
                     self.logger.warning(f"   This may indicate a state inconsistency")
             else:
                 acks_count = len(self.consensus.acks_received.get(height, set()))
-                self.logger.debug(f" Quorum not yet reached for height {height} (ACKs: {acks_count}/{self.consensus.quorum_size})")
+                self.logger.debug(f"Quorum not yet reached for height {height} (ACKs: {acks_count}/{dynamic_quorum})")
         
         except Exception as e:
             self.logger.error(f" Error handling ACK: {e}", exc_info=True)
@@ -601,9 +998,11 @@ class Node:
                         self.consensus.on_block_committed(height)
                         self.logger.debug(f" Consensus state updated: current_height={self.consensus.current_height}")
                         
-                        # Clear ACK tracking for this height
-                        if height in self.acks_sent:
-                            del self.acks_sent[height]
+                        # Clear ACK tracking for this height (all leaders)
+                        # Key format is "height:leader"
+                        keys_to_clear = [k for k in self.acks_sent.keys() if k.startswith(f"{height}:")]
+                        for key in keys_to_clear:
+                            del self.acks_sent[key]
                         # Clear COMMIT processing flag
                         if height in self.commits_processing:
                             del self.commits_processing[height]
@@ -631,9 +1030,346 @@ class Node:
             self.logger.error(f"Error handling COMMIT: {e}", exc_info=True)
     
     def _handle_heartbeat(self, message):
-        """Handle heartbeat message."""
-        # For now, just log - could be used for peer health tracking
-        pass
+        """Handle heartbeat message with view and state sync."""
+        sender_id = message.sender_id
+        payload = message.payload
+        peer_height = payload.get('height', 0)
+        peer_view = payload.get('current_view', 0)
+        peer_failed_validators = payload.get('failed_validators', [])
+        
+        # Record heartbeat for failure detection
+        self.network.record_heartbeat(sender_id)
+        
+        # Log peer state for debugging
+        self.logger.debug(f"Heartbeat from {sender_id}: height={peer_height}, view={peer_view}")
+        
+        # Get our height for comparison
+        my_height = self.blockchain.get_height()
+        
+        # Check if sender is a failed validator that has now recovered
+        # Only do this if we're NOT recovering ourselves
+        if not self.is_recovering:
+            sender_short = sender_id.split('.')[0]
+            
+            for validator in list(self.failed_validators):
+                if validator == sender_id or validator.split('.')[0] == sender_short:
+                    # This peer was failed but is now sending heartbeats
+                    # Check if they're caught up on blocks (height is close)
+                    height_diff = abs(peer_height - my_height)
+                    if height_diff <= 2:  # Allow some tolerance
+                        self.failed_validators.discard(validator)
+                        self.active_validators.add(validator)
+                        self.logger.info(f"Recovered peer {validator} is back online (view={peer_view}, height={peer_height}, my_height={my_height}) - added back to active validators")
+                        self.logger.info(f"Active validators: {list(self.active_validators)}")
+                    else:
+                        self.logger.debug(f"Peer {validator} is recovering but still syncing (their height={peer_height}, my height={my_height})")
+                    break
+        
+        # Sync view if peer has higher view (they know about view changes we missed)
+        if peer_view > self.current_view:
+            self.logger.info(f"Syncing view from {sender_id}: {self.current_view} -> {peer_view}")
+            with self.view_change_lock:
+                self.current_view = peer_view
+                self.last_view_change_time = time.time()
+            
+            # NOTE: We do NOT sync failed_validators from peers during recovery
+            # The recovering node should determine failures through its own health checks
+            # This prevents issues where peer's stale info causes incorrect state
+            if not self.is_recovering:
+                my_hostname = self.config.get_hostname()
+                my_short = my_hostname.split('.')[0]
+                
+                for failed in peer_failed_validators:
+                    short_failed = failed.split('.')[0]
+                    # Skip if it's our own hostname
+                    if failed == my_hostname or short_failed == my_short:
+                        continue
+                    
+                    for validator in self.consensus.validator_ids:
+                        if validator == failed or validator.split('.')[0] == short_failed:
+                            if validator not in self.failed_validators:
+                                self.failed_validators.add(validator)
+                                self.active_validators.discard(validator)
+                                self.logger.info(f"Synced failed validator: {validator}")
+                            break
+            else:
+                self.logger.debug(f"Skipping failed_validators sync during recovery")
+        
+        # Check if peer is ahead of us and we should sync blocks
+        if peer_height > my_height + 1:
+            self.logger.info(f"Peer {sender_id} is ahead (their height: {peer_height}, my height: {my_height})")
+            # Request sync if not already syncing
+            with self.sync_lock:
+                if not self.syncing:
+                    self._request_sync()
+    
+    def _handle_viewchange(self, message):
+        """Handle VIEWCHANGE message."""
+        payload = message.payload
+        new_view = payload.get('new_view', 0)
+        height = payload.get('height', 0)
+        failed_leader = payload.get('failed_leader', '')
+        reason = payload.get('reason', '')
+        sender_id = message.sender_id
+        
+        self.logger.info(f"Received VIEWCHANGE from {sender_id}: new_view={new_view}, height={height}, failed_leader={failed_leader}")
+        
+        with self.view_change_lock:
+            # Only process if this is a newer view
+            if new_view <= self.current_view:
+                self.logger.debug(f"Ignoring old view change (current view: {self.current_view}, received: {new_view})")
+                return
+            
+            # Only accept view changes that are exactly one view ahead
+            if new_view > self.current_view + 1:
+                self.logger.debug(f"Ignoring view change too far ahead (current: {self.current_view}, received: {new_view})")
+                return
+            
+            # Record vote
+            if new_view not in self.view_change_votes:
+                self.view_change_votes[new_view] = set()
+            self.view_change_votes[new_view].add(sender_id)
+            
+            # Verify the failed leader is actually failed or unreachable
+            short_failed = failed_leader.split('.')[0]
+            leader_is_failed = False
+            for validator in self.failed_validators:
+                if validator == failed_leader or validator.split('.')[0] == short_failed:
+                    leader_is_failed = True
+                    break
+            
+            # Also add our vote if we agree that the leader has failed
+            if leader_is_failed:
+                self.view_change_votes[new_view].add(self.config.get_hostname())
+            
+            # Check if we have enough votes for view change
+            # Need majority of ALL validators (not just active) to prevent split-brain
+            total_validators = len(self.consensus.validator_ids)
+            quorum_needed = (total_validators // 2) + 1
+            vote_count = len(self.view_change_votes[new_view])
+            
+            self.logger.info(f"View change votes for view {new_view}: {vote_count}/{quorum_needed} needed")
+            
+            if vote_count >= quorum_needed:
+                self.logger.info(f"VIEW CHANGE COMPLETE: Moving from view {self.current_view} to view {new_view}")
+                self.current_view = new_view
+                self.last_view_change_time = time.time()
+                self.view_change_in_progress = False
+                
+                # Mark the failed leader as inactive (if not already)
+                for validator in list(self.active_validators):
+                    if validator == failed_leader or validator.split('.')[0] == short_failed:
+                        self.active_validators.discard(validator)
+                        self.failed_validators.add(validator)
+                        self.view_change_initiated_for.add(validator)
+                        break
+                
+                # Clear all view change votes (we've completed this round)
+                self.view_change_votes.clear()
+                
+                # IMPORTANT: Clear ACK tracking for current and future heights
+                # so we can send ACKs to the new leader
+                # Key format is "height:leader"
+                current_height = self.blockchain.get_height()
+                keys_to_clear = []
+                for key in self.acks_sent.keys():
+                    try:
+                        height = int(key.split(':')[0])
+                        if height > current_height:
+                            keys_to_clear.append(key)
+                    except (ValueError, IndexError):
+                        pass
+                for key in keys_to_clear:
+                    del self.acks_sent[key]
+                self.logger.debug(f"Cleared ACK tracking keys: {keys_to_clear}")
+                
+                # Also clear pending proposal from old leader
+                self.consensus.pending_proposal = None
+                
+                # Clear commit tracking for uncommitted heights
+                heights_to_clear_commits = [h for h in self.commits_processing.keys() if h > current_height]
+                for h in heights_to_clear_commits:
+                    del self.commits_processing[h]
+                heights_to_clear_broadcast = [h for h in self.commits_broadcast.keys() if h > current_height]
+                for h in heights_to_clear_broadcast:
+                    del self.commits_broadcast[h]
+                
+                # Log new leader
+                next_height = current_height + 1
+                new_leader = self.get_effective_leader(next_height)
+                self.logger.info(f"New effective leader for height {next_height}: {new_leader}")
+    
+    def _handle_sync_request(self, message, peer_address: str):
+        """Handle SYNC_REQUEST message - send our blocks and state to the requesting peer."""
+        payload = message.payload
+        peer_height = payload.get('height', 0)
+        peer_hash = payload.get('latest_hash', '')
+        sender_id = message.sender_id
+        
+        my_height = self.blockchain.get_height()
+        self.logger.info(f"Received SYNC_REQUEST from {sender_id} at {peer_address}: their height={peer_height}, my height={my_height}")
+        self.logger.info(f"My state: view={self.current_view}, failed_validators={list(self.failed_validators)}")
+        
+        # Always send sync response with view and failed validators (even if same height)
+        # This helps recovering nodes sync their consensus state
+        blocks = []
+        if my_height > peer_height:
+            # We have more blocks, send them
+            self.logger.info(f"Will send {my_height - peer_height} blocks to {sender_id}")
+            
+            for h in range(peer_height + 1, my_height + 1):
+                block = self.blockchain.get_block(h)
+                if block:
+                    blocks.append(block.to_dict())
+        
+        # Include view and failed validators in response
+        self.network.send_sync_response(
+            peer_address,
+            my_height,
+            self.blockchain.get_latest_hash().hex(),
+            blocks,
+            self.current_view,
+            list(self.failed_validators)
+        )
+        self.logger.info(f"Sent SYNC_RESPONSE to {sender_id}: height={my_height}, view={self.current_view}, failed={list(self.failed_validators)}")
+        
+        # Also send mempool transactions
+        txs = self.mempool.get_all_transactions()
+        if txs:
+            tx_list = [
+                {
+                    'tx_id': tx.tx_id,
+                    'sender': tx.sender,
+                    'recipient': tx.recipient,
+                    'amount': tx.amount,
+                    'timestamp': tx.timestamp
+                }
+                for tx in txs
+            ]
+            self.network.broadcast_mempool_sync(tx_list)
+    
+    def _handle_sync_response(self, message):
+        """Handle SYNC_RESPONSE message - receive blocks and state from a peer."""
+        payload = message.payload
+        peer_height = payload.get('height', 0)
+        blocks_data = payload.get('blocks', [])
+        peer_view = payload.get('current_view', 0)
+        peer_failed_validators = payload.get('failed_validators', [])
+        sender_id = message.sender_id
+        
+        self.logger.info(f"Received SYNC_RESPONSE from {sender_id}: {len(blocks_data)} blocks, view={peer_view}, failed={peer_failed_validators}")
+        
+        # Sync view if peer has higher view
+        if peer_view > self.current_view:
+            self.logger.info(f"Syncing view from SYNC_RESPONSE: {self.current_view} -> {peer_view}")
+            with self.view_change_lock:
+                self.current_view = peer_view
+                self.last_view_change_time = time.time()
+        
+        # NOTE: We do NOT sync failed_validators from peers during recovery
+        # The recovering node should determine failures through its own health checks
+        if not self.is_recovering:
+            my_hostname = self.config.get_hostname()
+            my_short = my_hostname.split('.')[0]
+            
+            for failed in peer_failed_validators:
+                short_failed = failed.split('.')[0]
+                
+                # Skip if it's our own hostname
+                if failed == my_hostname or short_failed == my_short:
+                    continue
+                
+                for validator in self.consensus.validator_ids:
+                    if validator == failed or validator.split('.')[0] == short_failed:
+                        if validator not in self.failed_validators:
+                            self.failed_validators.add(validator)
+                            self.active_validators.discard(validator)
+                            self.logger.info(f"Synced failed validator from SYNC_RESPONSE: {validator}")
+                        break
+        else:
+            self.logger.debug(f"Skipping failed_validators sync during recovery (peer reported: {peer_failed_validators})")
+        
+        my_height = self.blockchain.get_height()
+        
+        if peer_height <= my_height and len(blocks_data) == 0:
+            self.logger.debug(f"Already at or ahead of peer (my height: {my_height}, peer height: {peer_height})")
+            return
+        
+        # Process blocks in order
+        blocks_added = 0
+        for block_dict in blocks_data:
+            try:
+                block = Block.from_dict(block_dict)
+                
+                # Verify block height is what we expect
+                expected_height = self.blockchain.get_height() + 1
+                if block.height != expected_height:
+                    self.logger.warning(f"Block height mismatch in sync: expected {expected_height}, got {block.height}")
+                    continue
+                
+                # Verify previous hash
+                expected_prev_hash = self.blockchain.get_latest_hash()
+                if block.prev_hash != expected_prev_hash:
+                    self.logger.warning(f"Block prev_hash mismatch in sync at height {block.height}")
+                    continue
+                
+                # Add block
+                if self.blockchain.add_block(block):
+                    blocks_added += 1
+                    
+                    # Remove synced transactions from mempool
+                    tx_ids = [tx.tx_id for tx in block.transactions]
+                    self.mempool.remove_transactions(tx_ids)
+                    
+                    # Update consensus state
+                    self.consensus.on_block_committed(block.height)
+                    
+                    self.logger.info(f"Synced block {block.height} from {sender_id}")
+                else:
+                    self.logger.warning(f"Failed to add synced block {block.height}")
+            except Exception as e:
+                self.logger.error(f"Error processing synced block: {e}")
+        
+        self.logger.info(f"Sync complete: added {blocks_added} blocks, new height: {self.blockchain.get_height()}, view: {self.current_view}")
+        
+        # If we received blocks, we're making progress - might be ready to complete recovery
+        if blocks_added > 0 or peer_view >= self.current_view:
+            # Check if we're now caught up
+            if self.blockchain.get_height() >= peer_height:
+                self.logger.info("Sync brought us up to date with peer")
+                if self.is_recovering:
+                    self._complete_recovery()
+    
+    def _handle_mempool_sync(self, message):
+        """Handle MEMPOOL_SYNC message - receive mempool transactions from a peer."""
+        payload = message.payload
+        transactions = payload.get('transactions', [])
+        sender_id = message.sender_id
+        
+        self.logger.info(f"Received MEMPOOL_SYNC from {sender_id}: {len(transactions)} transactions")
+        
+        added = 0
+        for tx_data in transactions:
+            try:
+                tx = Transaction(
+                    tx_id=tx_data['tx_id'],
+                    sender=tx_data['sender'],
+                    recipient=tx_data['recipient'],
+                    amount=tx_data['amount'],
+                    timestamp=tx_data['timestamp']
+                )
+                
+                # Check if already in blockchain
+                if self.blockchain.get_transaction(tx.tx_id):
+                    continue
+                
+                if self.mempool.add_transaction(tx):
+                    added += 1
+            except Exception as e:
+                self.logger.debug(f"Error processing synced transaction: {e}")
+        
+        if added > 0:
+            self.logger.info(f"Added {added} transactions from mempool sync")
     
     def _handle_getheaders(self, message, peer_address):
         """Handle GETHEADERS request."""
@@ -708,10 +1444,16 @@ class Node:
             self.logger.debug(f"Prev hash mismatch: expected {expected_prev_hash.hex()[:16]}..., got {block.prev_hash.hex()[:16]}...")
             return False
         
-        # Check proposer is correct leader
-        expected_leader = self.consensus.get_current_leader(block.height)
-        if block.proposer_id != expected_leader:
-            self.logger.debug(f"Leader mismatch: expected {expected_leader}, got {block.proposer_id}")
+        # Check proposer is the effective leader (accounts for view changes)
+        effective_leader = self.get_effective_leader(block.height)
+        proposer_short = block.proposer_id.split('.')[0]
+        leader_short = effective_leader.split('.')[0]
+        
+        # Match by full hostname or short hostname
+        is_valid_proposer = (block.proposer_id == effective_leader or proposer_short == leader_short)
+        
+        if not is_valid_proposer:
+            self.logger.debug(f"Leader mismatch: expected {effective_leader}, got {block.proposer_id}")
             return False
         
         # Check block hash matches computed hash

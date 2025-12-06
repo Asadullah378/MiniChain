@@ -1,9 +1,9 @@
 export const mockStatus = {
-    node_id: "node-fallback-01",
-    height: 42,
-    peers_count: 3,
-    mempool_size: 5,
-    leader: "node-fallback-01",
+    node_id: "--",
+    height: 0,
+    peers_count: 0,
+    mempool_size: 0,
+    leader: "--",
     timestamp: Date.now() / 1000
 };
 

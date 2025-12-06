@@ -143,7 +143,7 @@ const Logs = () => {
               // Collect initial batch (first 50 logs) and add them all at once in correct order
               // The backend sends them in reverse order (newest first), so we collect them
               // and then set them all at once to maintain order
-              if (!initialBatchSet && initialLogsBatch.length < 50) {
+              if (!initialBatchSet && initialLogsBatch.length < 500) {
                 initialLogsBatch.push(entry);
                 
                 // Clear any existing timeout

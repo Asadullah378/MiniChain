@@ -38,15 +38,27 @@ async def get_status():
         raise HTTPException(status_code=503, detail="Node not initialized")
     
     height = node.blockchain.get_height()
+    next_height = height + 1
+    
+    # Get effective leader (accounts for view changes)
+    effective_leader = node.get_effective_leader(next_height)
+    my_hostname = node.config.get_hostname()
+    
     return {
         "node_id": node.config.get_node_id(),
-        "hostname": node.config.get_hostname(),
+        "hostname": my_hostname,
         "height": height,
         "latest_hash": node.blockchain.get_latest_hash().hex(),
         "peers": len(node.network.peers),
         "mempool_size": node.mempool.size(),
-        "leader": node.consensus.get_current_leader(height + 1),
-        "is_leader": node.consensus.is_leader(height + 1)
+        "leader": effective_leader,
+        "is_leader": my_hostname == effective_leader or my_hostname.split('.')[0] == effective_leader.split('.')[0],
+        "active_peers": len(node.get_active_validators()) - 1,  # Exclude self
+        "current_view": node.current_view,
+        "connections": node.network.get_connection_count(),
+        "is_recovering": node.is_recovering,
+        "active_validators": node.get_active_validators(),
+        "failed_validators": list(node.failed_validators)
     }
 
 @app.get("/blocks")
@@ -227,6 +239,59 @@ async def reconnect_network():
     node.network.connect_to_peers()
     return {"status": "reconnection triggered"}
 
+
+# --- Node Control Endpoints ---
+
+@app.post("/shutdown")
+async def shutdown_node():
+    """
+    Gracefully shutdown the node.
+    This will stop all services and terminate the process.
+    """
+    if not node:
+        raise HTTPException(status_code=503, detail="Node not initialized")
+    
+    node.logger.warning("Shutdown requested via API")
+    
+    # Run shutdown in background thread to allow response to be sent
+    import threading
+    def do_shutdown():
+        import time
+        time.sleep(0.5)  # Give time for response to be sent
+        node.request_shutdown()
+    
+    thread = threading.Thread(target=do_shutdown, daemon=True)
+    thread.start()
+    
+    return {"status": "shutdown initiated", "message": "Node is shutting down..."}
+
+@app.get("/peers/status")
+async def get_peers_status():
+    """Get status of all peers including health information."""
+    if not node:
+        raise HTTPException(status_code=503, detail="Node not initialized")
+    
+    peer_status = node.network.get_peer_status()
+    active_validators = node.get_active_validators()
+    failed_validators = list(node.failed_validators)
+    
+    return {
+        "peer_status": peer_status,
+        "active_validators": active_validators,
+        "failed_validators": failed_validators,
+        "current_view": node.current_view,
+        "connection_count": node.network.get_connection_count()
+    }
+
+@app.post("/sync/request")
+async def request_sync():
+    """Manually trigger a sync request to peers."""
+    if not node:
+        raise HTTPException(status_code=503, detail="Node not initialized")
+    
+    node._request_sync()
+    return {"status": "sync requested", "current_height": node.blockchain.get_height()}
+
 @app.get("/logs")
 async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = True):
     """
@@ -364,12 +429,12 @@ async def stream_logs(level: Optional[str] = None):
         """Generator function that yields log entries as SSE events."""
         last_position = log_path.stat().st_size if log_path.exists() else 0
         
-        # Send initial batch of recent logs (last 50 lines)
+        # Send initial batch of recent logs (last 500 lines)
         try:
             with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
                 lines = f.readlines()
-                # Send last 50 lines in reverse order (newest first)
-                for line in reversed(lines[-50:]):
+                # Send last 500 lines in reverse order (newest first)
+                for line in reversed(lines[-500:]):
                     line = line.strip()
                     if not line:
                         continue
