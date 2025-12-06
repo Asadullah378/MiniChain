@@ -27,27 +27,26 @@ def test_send_and_receive_blocks():
         block = _build_block(blockchain1, height=1)
         assert blockchain1.add_block(block)
         
+        config = Config(config_path="config.yaml")
+        
         peers = [
             {
-                "hostname": "svm-11.cs.helsinki.fi", 
+                "hostname": config.get_hostname(), 
                 "port": 8090
             },
             {
-                "hostname": "svm-11.cs.helsinki.fi", 
+                "hostname": config.get_hostname(), 
                 "port": 8091
             },
         ]
         
-        config_1 = Config(config_path="config.yaml")
-        config_1['network']['peers'] = peers
-        config_1.config['node']['port'] = 8090
+        config['network']['peers'] = peers
         
-        config_2 = Config(config_path="config.yaml")
-        config_2['network']['peers'] = peers
-        config_2.config['node']['port'] = 8091
+        config.config['node']['port'] = 8090
+        node_1 = Node(config)
         
-        node_1 = Node(config_1)
-        node_2 = Node(config_2)
+        config.config['node']['port'] = 8091
+        node_2 = Node(config)
         
         t1 = threading.Thread(target=node_1.start, daemon=True)
         t2 = threading.Thread(target=node_2.start, daemon=True)
