@@ -6,6 +6,42 @@ A simple blockchain implementation for distributed systems demonstration.
 
 ![MiniChain Sample UI](./sample/MiniChainSample.png)
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+  - [Quick Start via Docker Compose](#1-quick-start-via-docker-compose)
+  - [Setup (Run once on each VM)](#2-setup-run-once-on-each-vm)
+  - [Configure Peers](#3-configure-peers)
+  - [Start Node](#4-start-node-run-on-each-vm)
+  - [Run Frontend (Vite React)](#5-run-frontend-vite-react)
+- [Configuration](#configuration)
+  - [`config.yaml` - Blockchain Settings](#configyaml---blockchain-settings)
+  - [API Port](#api-port)
+  - [`peers.txt` - Network Configuration](#peerstxt---network-configuration)
+- [CLI Interface](#cli-interface)
+- [Architecture](#architecture)
+- [Features](#features)
+  - [Consensus](#consensus)
+  - [Networking](#networking)
+  - [Blockchain](#blockchain)
+- [Project Structure](#project-structure)
+- [How It Works](#how-it-works)
+  - [Transaction Flow](#transaction-flow)
+  - [Message Types](#message-types)
+  - [Consensus Process](#consensus-process)
+- [Troubleshooting](#troubleshooting)
+- [Advanced Usage](#advanced-usage)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Development](#development)
+- [License](#license)
+- [API Reference](#api-reference)
+  - [Standard Endpoints](#standard-endpoints)
+  - [Debug Endpoints](#debug-endpoints)
+  - [Node Control & Logs](#node-control--logs)
+- [Docker (Quick Start)](#docker-quick-start)
+- [Remote Access (UH VPN + SSH Gateway)](#remote-access-uh-vpn--ssh-gateway)
 ## Overview
 
 MiniChain is a minimal blockchain implementation that demonstrates key distributed systems concepts:
