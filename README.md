@@ -17,7 +17,23 @@ MiniChain is a minimal blockchain implementation that demonstrates key distribut
 
 ## Quick Start
 
-### 1. Setup (Run once on each VM)
+### 1. Quick Start via Docker Compose
+
+You can spin up the API and frontend locally without setting up Python/node manually.
+
+```bash
+# From repo root
+VITE_API_URL="http://localhost:8080" docker compose up --build
+# Frontend: http://localhost:5173
+# API:      http://localhost:8080/status
+```
+
+Notes:
+- Environment variable `VITE_API_URL` points the frontend at the API.
+- Compose builds both images and binds ports `5173` (frontend) and `8080` (API).
+- See `DOCKER.md` for multi-node, reverse proxy, and TLS guidance.
+
+### 2. Setup (Run once on each VM)
 
 ```bash
 chmod +x setup.sh
@@ -30,7 +46,7 @@ This will:
 - Create virtual environment
 - Install all dependencies
 
-### 2. Configure Peers
+### 3. Configure Peers
 
 Edit `peers.txt` to include all nodes in your network:
 
@@ -42,7 +58,7 @@ svm-11-3.cs.helsinki.fi:8000
 
 **Important**: All nodes must have the same `peers.txt` file with all peers listed.
 
-### 3. Start Node (Run on each VM)
+### 4. Start Node (Run on each VM)
 
 ```bash
 chmod +x start.sh
@@ -100,7 +116,7 @@ This will remove:
 - All blockchain data (`data/` directory)
 - All log files (`minichain.log`)
 
-### 4. Run Frontend (Vite React)
+### 5. Run Frontend (Vite React)
 
 The frontend now supports connecting to multiple backend nodes.
 
@@ -148,6 +164,22 @@ To run a full 3-node network on VMs and access it locally:
 
 3.  **Access Dashboard**:
     Open `http://localhost:5173` in your browser.
+
+### 5. Quick Start via Docker Compose
+
+You can spin up the API and frontend locally without setting up Python/node manually.
+
+```bash
+# From repo root
+VITE_API_URL="http://localhost:8080" docker compose up --build
+# Frontend: http://localhost:5173
+# API:      http://localhost:8080/status
+```
+
+Notes:
+- Environment variable `VITE_API_URL` points the frontend at the API.
+- Compose builds both images and binds ports `5173` (frontend) and `8080` (API).
+- See `DOCKER.md` for multi-node, reverse proxy, and TLS guidance.
 
 #### Switching Nodes
 
