@@ -29,6 +29,13 @@ Then run pytest from the repository root so the `pytest.ini` (which adds the roo
 python -m pytest
 ```
 
+Tip: to run just a subset quickly while iterating:
+
+```bash
+python -m pytest tests/test_blockchain.py -q
+python -m pytest -k quorum -q
+```
+
 Useful flags:
 
 - `python -m pytest -k quorum` – run tests whose names match `quorum`.
@@ -81,5 +88,6 @@ Before merges or milestone demos, ensure:
 - **ImportError (msgpack/cryptography)**: Run `pip install -r requirements.txt` inside `.venv`.
 - **Tests not discovered**: Ensure files are named `test_*.py` and the repo root is current working directory.
 - **Path issues**: `pytest.ini` sets `pythonpath = .`; confirm you are not running pytest from a subdirectory.
+- **Leftover data**: Some tests read/write under `data/`; use `tmp_path` fixtures or `--clean` run scripts if local state interferes.
 
 For additional context on architecture and requirements, see `docs/ARCHITECTURE.md` and `PRD.md`.

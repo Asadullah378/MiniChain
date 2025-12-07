@@ -78,6 +78,13 @@ This document explains how the MiniChain codebase fits together so you can navig
 - Provides real-time inspection (`status`, `chain`, `block`, `mempool`, `peers`, `logs`) and transaction submission (`submit`).
 - Uses the node's public API (`node.submit_transaction`, blockchain getters) so it doubles as a thin usage example for scripting or testing.
 
+### API Server (`src/api/server.py`)
+
+- FastAPI app exposing node introspection and control endpoints.
+- Status, blocks, mempool, transaction lookup; debug endpoints for network and consensus; node control (shutdown), sync triggers.
+- Log access: JSON fetch (`/logs`) and SSE stream (`/logs/stream`) for realtime UI updates.
+- Started via `start_api_server(node, port)` and runs in a background thread alongside the node.
+
 ## Message & Data Lifecycles
 
 ### Transaction
