@@ -33,6 +33,7 @@ To access the API from your local machine (e.g., laptop) while the node runs on 
 To run a full network, you need to start nodes on different machines. Here is an example workflow using `melkki` as a jump host:
 
 ### 1. Start Node 1 (svm-11)
+
 ```bash
 # Terminal 1 (Local)
 ssh -L 8080:localhost:8080 -J user@melkki.cs.helsinki.fi user@svm-11.cs.helsinki.fi
@@ -43,6 +44,7 @@ cd MiniChain
 ```
 
 ### 2. Start Node 2 (svm-11-2)
+
 ```bash
 # Terminal 2 (Local)
 ssh -J user@melkki.cs.helsinki.fi user@svm-11-2.cs.helsinki.fi
@@ -53,6 +55,7 @@ cd MiniChain
 ```
 
 ### 3. Start Node 3 (svm-11-3)
+
 ```bash
 # Terminal 3 (Local)
 ssh -J user@melkki.cs.helsinki.fi user@svm-11-3.cs.helsinki.fi
@@ -64,17 +67,23 @@ cd MiniChain
 
 ## Endpoint Summary
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/status` | Get node status (height, peers, leader) |
-| `POST` | `/submit` | Submit a transaction |
-| `GET` | `/blocks` | List recent blocks |
-| `GET` | `/blocks/{height}` | Get block details |
-| `GET` | `/mempool` | View pending transactions |
-| `POST` | `/debug/mempool/clear` | Clear mempool (Debug) |
-| `POST` | `/debug/network/disconnect` | Simulate network partition (Debug) |
-| `POST` | `/debug/network/reconnect` | Reconnect network (Debug) |
-| `POST` | `/debug/consensus/timeout` | Trigger consensus timeout (Debug) |
+| Method | Endpoint                    | Description                             |
+| :----- | :-------------------------- | :-------------------------------------- |
+| `GET`  | `/status`                   | Get node status (height, peers, leader) |
+| `POST` | `/submit`                   | Submit a transaction                    |
+| `GET`  | `/blocks`                   | List recent blocks                      |
+| `GET`  | `/blocks/{height}`          | Get block details                       |
+| `GET`  | `/mempool`                  | View pending transactions               |
+| `POST` | `/debug/mempool/clear`      | Clear mempool (Debug)                   |
+| `POST` | `/debug/network/disconnect` | Simulate network partition (Debug)      |
+| `POST` | `/debug/network/reconnect`  | Reconnect network (Debug)               |
+| `POST` | `/debug/consensus/timeout`  | Trigger consensus timeout (Debug)       |
+| `GET`  | `/transactions/{tx_id}`     | Lookup transaction by id                |
+| `GET`  | `/peers/status`             | Peer and validator status               |
+| `POST` | `/sync/request`             | Manually request sync                   |
+| `GET`  | `/logs`                     | Fetch parsed logs                       |
+| `GET`  | `/logs/stream`              | Stream logs via SSE                     |
+| `POST` | `/shutdown`                 | Shutdown node                           |
 
 ## Standard Endpoints
 
@@ -87,6 +96,7 @@ curl -s http://localhost:8080/status | jq .
 ```
 
 **Response:**
+
 ```json
 {
   "node_id": "node1",
@@ -115,6 +125,7 @@ curl -s -X POST http://localhost:8080/submit \
 ```
 
 **Response:**
+
 ```json
 {
   "status": "submitted",
@@ -127,6 +138,7 @@ curl -s -X POST http://localhost:8080/submit \
 Retrieve a list of recent blocks.
 
 **Parameters:**
+
 - `start`: Starting block height (default: 0)
 - `limit`: Number of blocks to retrieve (default: 10)
 
@@ -150,6 +162,42 @@ View all pending transactions currently in the mempool.
 
 ```bash
 curl -s http://localhost:8080/mempool | jq .
+```
+
+### 6. Get Transaction Details
+
+```bash
+curl -s http://localhost:8080/transactions/<tx_id> | jq .
+```
+
+### 7. Peers Status
+
+```bash
+curl -s http://localhost:8080/peers/status | jq .
+```
+
+### 8. Request Sync
+
+```bash
+curl -s -X POST http://localhost:8080/sync/request | jq .
+```
+
+### 9. Fetch Logs
+
+```bash
+curl -s "http://localhost:8080/logs?lines=100&level=INFO&tail=true" | jq .
+```
+
+### 10. Stream Logs (SSE)
+
+```bash
+curl -N "http://localhost:8080/logs/stream?level=INFO"
+```
+
+### 11. Shutdown Node
+
+```bash
+curl -s -X POST http://localhost:8080/shutdown | jq .
 ```
 
 ## Debug Endpoints

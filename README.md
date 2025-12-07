@@ -26,7 +26,7 @@ chmod +x setup.sh
 
 This will:
 
-- Check Python 3.8+ installation
+- Check Python 3.8+ installation (3.11+ recommended)
 - Create virtual environment
 - Install all dependencies
 
@@ -506,6 +506,18 @@ curl -X POST http://localhost:8080/submit \
   -d '{"sender": "alice", "recipient": "bob", "amount": 10.5}'
 ```
 
+#### Get Transaction Details
+
+```bash
+curl http://localhost:8080/transactions/<tx_id>
+```
+
+#### View Mempool
+
+```bash
+curl http://localhost:8080/mempool
+```
+
 ### Debug Endpoints
 
 These endpoints are for testing edge cases and simulating network conditions.
@@ -540,6 +552,38 @@ Simulate a consensus timeout (e.g., to force a view change).
 
 ```bash
 curl -X POST http://localhost:8080/debug/consensus/timeout
+```
+
+### Node Control & Logs
+
+#### Shutdown Node
+
+```bash
+curl -X POST http://localhost:8080/shutdown
+```
+
+#### Peers Status
+
+```bash
+curl http://localhost:8080/peers/status
+```
+
+#### Request Sync
+
+```bash
+curl -X POST http://localhost:8080/sync/request
+```
+
+#### Fetch Logs
+
+```bash
+curl "http://localhost:8080/logs?lines=100&level=INFO&tail=true" | jq .
+```
+
+#### Stream Logs (SSE)
+
+```bash
+curl -N "http://localhost:8080/logs/stream?level=INFO"
 ```
 
 ## Docker (Quick Start)
