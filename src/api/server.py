@@ -161,6 +161,9 @@ async def submit_transaction(tx_data: TransactionModel):
     
     from src.common.crypto import hash_string
     
+    if tx_data.amount <= 0:
+        raise ServerError(status_code=400, message="Amount must be positive")
+    
     # Generate ID
     tx_id = hash_string(f"{tx_data.sender}{tx_data.recipient}{tx_data.amount}{time.time()}")[:16]
     
