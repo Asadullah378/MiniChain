@@ -2,7 +2,10 @@
 
 A simple blockchain implementation for distributed systems demonstration.
 
-![Mini Chain](./sample/MiniChainSample.png)
+![MiniChain Unified View](./sample/MiniChainUnified.png)
+
+![MiniChain Sample UI](./sample/MiniChainSample.png)
+
 ## Overview
 
 MiniChain is a minimal blockchain implementation that demonstrates key distributed systems concepts:
@@ -110,6 +113,7 @@ To run a full 3-node network on VMs and access it locally:
     Open 3 separate terminals on your local machine and run the following commands to start 3 nodes with port forwarding:
 
     **Node 1 (Port 8001):**
+
     ```bash
     ssh -L 8001:localhost:8001 -J <user>@melkki.cs.helsinki.fi <user>@svm-11.cs.helsinki.fi
     cd MiniChain/
@@ -117,6 +121,7 @@ To run a full 3-node network on VMs and access it locally:
     ```
 
     **Node 2 (Port 8002):**
+
     ```bash
     ssh -L 8002:localhost:8002 -J <user>@melkki.cs.helsinki.fi <user>@svm-11-2.cs.helsinki.fi
     cd MiniChain/
@@ -124,13 +129,14 @@ To run a full 3-node network on VMs and access it locally:
     ```
 
     **Node 3 (Port 8003):**
+
     ```bash
     ssh -L 8003:localhost:8003 -J <user>@melkki.cs.helsinki.fi <user>@svm-11-3.cs.helsinki.fi
     cd MiniChain/
     ./start.sh svm-11-3.cs.helsinki.fi --api-port 8003 --no-cli
     ```
 
-    *Replace `<user>` with your username.*
+    _Replace `<user>` with your username._
 
 2.  **Start Frontend (Locally)**:
 
@@ -153,8 +159,8 @@ The frontend includes a node selector in the sidebar. You can switch between the
 ```javascript
 // frontend/src/nodeConfig.js
 export const nodes = [
-    { id: 'node1', name: 'Node 1', url: 'http://localhost:8001' },
-    // ... add more nodes here
+  { id: "node1", name: "Node 1", url: "http://localhost:8001" },
+  // ... add more nodes here
 ];
 ```
 
