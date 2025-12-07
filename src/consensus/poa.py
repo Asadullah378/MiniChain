@@ -10,7 +10,7 @@ class RoundRobinPoA:
     """Round-robin Proof-of-Authority consensus."""
     
     def __init__(self, node_id: str, validator_ids: List[str], 
-                 block_interval: int = 5, proposal_timeout: int = 10):
+                 block_interval: int = 5, proposal_timeout: int = 10, quorum_size: Optional[int] = None):
         """
         Initialize PoA consensus.
         
@@ -35,6 +35,9 @@ class RoundRobinPoA:
         self.acks_received: Dict[int, Set[str]] = {}  # height -> set of voter IDs
         self.last_block_time = time.time()
         self.committing: Dict[int, bool] = {}  # height -> is_committing flag to prevent duplicate commits
+        
+    def has_quorum(self, height):
+        return True
     
     def get_current_leader(self, height: int) -> str:
         """

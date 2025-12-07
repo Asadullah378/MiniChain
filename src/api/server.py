@@ -1,8 +1,11 @@
+import os
+from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 import threading
 import uvicorn
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, APIRouter, Body
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import time
@@ -13,7 +16,20 @@ from pathlib import Path
 from src.node.node import Node
 from src.chain.block import Transaction
 
-app = FastAPI(title="MiniChain API")
+load_dotenv()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    app.state.node = None
+    # The node dependency is injected externally
+    yield
+    # Shutdown logic
+    app.state.node = None
+
+app = FastAPI(title="MiniChain API", lifespan=lifespan)
+
+debug_router = APIRouter(prefix="/debug", tags=["Debug"])
 
 # Enable CORS
 app.add_middleware(
@@ -24,8 +40,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global node instance
-node: Optional[Node] = None
+class ServerError(Exception):
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        self.message = message
+        
+@app.exception_handler(ServerError)
+async def server_error_handler(_, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message}
+    )
 
 class TransactionModel(BaseModel):
     sender: str
@@ -34,46 +59,46 @@ class TransactionModel(BaseModel):
 
 @app.get("/status")
 async def get_status():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    height = node.blockchain.get_height()
+    height = app.state.node.blockchain.get_height()
     next_height = height + 1
     
     # Get effective leader (accounts for view changes)
-    effective_leader = node.get_effective_leader(next_height)
-    my_hostname = node.config.get_hostname()
+    effective_leader = app.state.node.get_effective_leader(next_height)
+    my_hostname = app.state.node.config.get_hostname()
     
     return {
-        "node_id": node.config.get_node_id(),
+        "node_id": app.state.node.config.get_node_id(),
         "hostname": my_hostname,
         "height": height,
-        "latest_hash": node.blockchain.get_latest_hash().hex(),
-        "peers": len(node.network.peers),
-        "mempool_size": node.mempool.size(),
+        "latest_hash": app.state.node.blockchain.get_latest_hash().hex(),
+        "peers": len(app.state.node.network.peers),
+        "mempool_size": app.state.node.mempool.size(),
         "leader": effective_leader,
         "is_leader": my_hostname == effective_leader or my_hostname.split('.')[0] == effective_leader.split('.')[0],
-        "active_peers": len(node.get_active_validators()) - 1,  # Exclude self
-        "current_view": node.current_view,
-        "connections": node.network.get_connection_count(),
-        "is_recovering": node.is_recovering,
-        "active_validators": node.get_active_validators(),
-        "failed_validators": list(node.failed_validators)
+        "active_peers": len(app.state.node.get_active_validators()) - 1,  # Exclude self
+        "current_view": app.state.node.current_view,
+        "connections": app.state.node.network.get_connection_count(),
+        "is_recovering": app.state.node.is_recovering,
+        "active_validators": app.state.node.get_active_validators(),
+        "failed_validators": list(app.state.node.failed_validators)
     }
 
 @app.get("/blocks")
 async def get_blocks(start: int = 0, limit: int = 10):
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    height = node.blockchain.get_height()
+    height = app.state.node.blockchain.get_height()
     # Adjust start to be 0-indexed logic if needed, but blockchain usually 0-indexed
     # If user wants "last 10", they might need to calculate, or we provide reverse order
     # For now, simple range
     
     blocks = []
     for h in range(start, min(start + limit, height + 1)):
-        block = node.blockchain.get_block(h)
+        block = app.state.node.blockchain.get_block(h)
         if block:
             blocks.append({
                 "height": block.height,
@@ -87,12 +112,12 @@ async def get_blocks(start: int = 0, limit: int = 10):
 
 @app.get("/blocks/{height}")
 async def get_block(height: int):
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    block = node.blockchain.get_block(height)
+    block = app.state.node.blockchain.get_block(height)
     if not block:
-        raise HTTPException(status_code=404, detail="Block not found")
+        raise ServerError(status_code=404, message="Block not found")
     
     return {
         "height": block.height,
@@ -114,10 +139,10 @@ async def get_block(height: int):
 
 @app.get("/mempool")
 async def get_mempool():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    txs = node.mempool.get_all_transactions()
+    txs = app.state.node.mempool.get_all_transactions()
     return [
         {
             "id": tx.tx_id,
@@ -131,8 +156,8 @@ async def get_mempool():
 
 @app.post("/submit")
 async def submit_transaction(tx_data: TransactionModel):
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     from src.common.crypto import hash_string
     
@@ -147,18 +172,18 @@ async def submit_transaction(tx_data: TransactionModel):
         timestamp=time.time()
     )
     
-    if node.submit_transaction(tx):
+    if app.state.node.submit_transaction(tx):
         return {"status": "submitted", "tx_id": tx_id}
     else:
-        raise HTTPException(status_code=400, detail="Transaction rejected (duplicate?)")
+        raise ServerError(status_code=400, message="Transaction rejected (duplicate?)")
 
 @app.get("/transactions/{tx_id}")
 async def get_transaction_details(tx_id: str):
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # 1. Check Mempool
-    tx = node.mempool.get_transaction(tx_id)
+    tx = app.state.node.mempool.get_transaction(tx_id)
     if tx:
         return {
             "id": tx.tx_id,
@@ -171,7 +196,7 @@ async def get_transaction_details(tx_id: str):
         }
     
     # 2. Check Blockchain
-    result = node.blockchain.get_transaction(tx_id)
+    result = app.state.node.blockchain.get_transaction(tx_id)
     if result:
         tx, height = result
         return {
@@ -184,23 +209,23 @@ async def get_transaction_details(tx_id: str):
             "block_height": height
         }
         
-    raise HTTPException(status_code=404, detail="Transaction not found")
+    raise ServerError(status_code=404, message="Transaction not found")
 
 # --- Debug Endpoints ---
 
-@app.post("/debug/mempool/clear")
+@debug_router.post("/mempool/clear")
 async def clear_mempool():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Access private attribute directly for debug
-    node.mempool.transactions.clear()
+    app.state.node.mempool.transactions.clear()
     return {"status": "mempool cleared"}
 
-@app.post("/debug/consensus/timeout")
+@debug_router.post("/consensus/timeout")
 async def trigger_timeout():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Force a view change by manipulating last_block_time or similar?
     # Or just skip the current leader?
@@ -210,33 +235,33 @@ async def trigger_timeout():
     # The current implementation (checked in node.py) has a placeholder _check_timeouts.
     # So this might be a no-op unless we implement that logic.
     # Let's just log for now.
-    node.logger.warning("DEBUG: Triggered timeout simulation (not fully implemented in consensus)")
+    app.state.node.logger.warning("DEBUG: Triggered timeout simulation (not fully implemented in consensus)")
     return {"status": "timeout triggered (check logs)"}
 
-@app.post("/debug/network/disconnect")
+@debug_router.post("/network/disconnect")
 async def disconnect_network():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Close all connections
-    count = len(node.network.connections)
+    count = len(app.state.node.network.connections)
     # We need to access the network manager's connection list
     # This is a bit hacky, but it's for debug
-    for peer_addr, conn in list(node.network.connections.items()):
+    for peer_addr, conn in list(app.state.node.network.connections.items()):
         try:
             conn.close()
         except:
             pass
-    node.network.connections.clear()
+    app.state.node.network.connections.clear()
     return {"status": "disconnected", "peers_removed": count}
 
-@app.post("/debug/network/reconnect")
+@debug_router.post("/network/reconnect")
 async def reconnect_network():
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
     # Trigger connection logic
-    node.network.connect_to_peers()
+    app.state.node.network.connect_to_peers()
     return {"status": "reconnection triggered"}
 
 
@@ -248,17 +273,17 @@ async def shutdown_node():
     Gracefully shutdown the node.
     This will stop all services and terminate the process.
     """
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    node.logger.warning("Shutdown requested via API")
+    app.state.node.logger.warning("Shutdown requested via API")
     
     # Run shutdown in background thread to allow response to be sent
     import threading
     def do_shutdown():
         import time
         time.sleep(0.5)  # Give time for response to be sent
-        node.request_shutdown()
+        app.state.node.request_shutdown()
     
     thread = threading.Thread(target=do_shutdown, daemon=True)
     thread.start()
@@ -268,29 +293,29 @@ async def shutdown_node():
 @app.get("/peers/status")
 async def get_peers_status():
     """Get status of all peers including health information."""
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    peer_status = node.network.get_peer_status()
-    active_validators = node.get_active_validators()
-    failed_validators = list(node.failed_validators)
+    peer_status = app.state.node.network.get_peer_status()
+    active_validators = app.state.node.get_active_validators()
+    failed_validators = list(app.state.node.failed_validators)
     
     return {
         "peer_status": peer_status,
         "active_validators": active_validators,
         "failed_validators": failed_validators,
-        "current_view": node.current_view,
-        "connection_count": node.network.get_connection_count()
+        "current_view": app.state.node.current_view,
+        "connection_count": app.state.node.network.get_connection_count()
     }
 
 @app.post("/sync/request")
 async def request_sync():
     """Manually trigger a sync request to peers."""
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    node._request_sync()
-    return {"status": "sync requested", "current_height": node.blockchain.get_height()}
+    app.state.node._request_sync()
+    return {"status": "sync requested", "current_height": app.state.node.blockchain.get_height()}
 
 @app.get("/logs")
 async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = True):
@@ -305,12 +330,12 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
     Returns:
         Dictionary with log entries and metadata
     """
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    log_file = node.config.get('logging.file', 'minichain.log')
+    log_file = app.state.node.config.get('logging.file', 'minichain.log')
     if not log_file:
-        raise HTTPException(status_code=404, detail="No log file configured")
+        raise ServerError(status_code=404, message="No log file configured")
     
     from pathlib import Path
     import os
@@ -322,13 +347,13 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
         # Try current directory first
         if not log_path.exists():
             # Try in data directory
-            data_dir = node.config.get_data_dir()
+            data_dir = app.state.node.config.get_data_dir()
             log_path = Path(data_dir) / log_file
         else:
             log_path = Path(log_file)
     
     if not log_path.exists():
-        raise HTTPException(status_code=404, detail=f"Log file not found: {log_file}")
+        raise ServerError(status_code=404, message=f"Log file not found: {log_file}")
     
     try:
         # Read log file
@@ -391,7 +416,7 @@ async def get_logs(lines: int = 100, level: Optional[str] = None, tail: bool = T
         }
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error reading log file: {str(e)}")
+        raise ServerError(status_code=500, message=f"Error reading log file: {str(e)}")
 
 
 @app.get("/logs/stream")
@@ -405,25 +430,25 @@ async def stream_logs(level: Optional[str] = None):
     Returns:
         StreamingResponse with SSE format
     """
-    if not node:
-        raise HTTPException(status_code=503, detail="Node not initialized")
+    if not app.state.node:
+        raise ServerError(status_code=503, message="Node not initialized")
     
-    log_file = node.config.get('logging.file', 'minichain.log')
+    log_file = app.state.node.config.get('logging.file', 'minichain.log')
     if not log_file:
-        raise HTTPException(status_code=404, detail="No log file configured")
+        raise ServerError(status_code=404, message="No log file configured")
     
     log_path = Path(log_file)
     
     # Handle relative paths
     if not log_path.is_absolute():
         if not log_path.exists():
-            data_dir = node.config.get_data_dir()
+            data_dir = app.state.node.config.get_data_dir()
             log_path = Path(data_dir) / log_file
         else:
             log_path = Path(log_file)
     
     if not log_path.exists():
-        raise HTTPException(status_code=404, detail=f"Log file not found: {log_file}")
+        raise ServerError(status_code=404, message=f"Log file not found: {log_file}")
     
     async def generate_log_stream():
         """Generator function that yields log entries as SSE events."""
@@ -550,14 +575,17 @@ async def stream_logs(level: Optional[str] = None):
         }
     )
 
+if os.getenv("DEBUG_API", "false").lower() == "true":
+    app.include_router(debug_router)
 
 def start_api_server(node_instance: Node, port: int):
     """Start the API server."""
-    global node
-    node = node_instance
+    app.state.node = node_instance
     
+    if os.getenv("DEBUG_API", "false").lower() == "true":
+        app.state.node.logger.warning("Debug API endpoints are enabled")
     # Run uvicorn
-    # We run this in the main thread usually, but node.start() blocks.
+    # We run this in the main thread usually, but app.state.node.start() blocks.
     # So we'll run uvicorn in a thread or vice versa.
     # Since uvicorn handles signals well, it's often better to run it in main.
     # But Node has its own loop.

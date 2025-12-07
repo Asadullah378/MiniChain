@@ -167,3 +167,4 @@ def test_get_transaction_details_not_found(client, mock_node):
     
     response = client.get("/transactions/tx3")
     assert response.status_code == 404
+    
