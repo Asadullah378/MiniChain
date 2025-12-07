@@ -29,6 +29,7 @@ VITE_API_URL="http://localhost:8080" docker compose up --build
 ```
 
 Notes:
+
 - Environment variable `VITE_API_URL` points the frontend at the API.
 - Compose builds both images and binds ports `5173` (frontend) and `8080` (API).
 - See `DOCKER.md` for multi-node, reverse proxy, and TLS guidance.
@@ -177,6 +178,7 @@ VITE_API_URL="http://localhost:8080" docker compose up --build
 ```
 
 Notes:
+
 - Environment variable `VITE_API_URL` points the frontend at the API.
 - Compose builds both images and binds ports `5173` (frontend) and `8080` (API).
 - See `DOCKER.md` for multi-node, reverse proxy, and TLS guidance.
