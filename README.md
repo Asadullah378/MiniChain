@@ -407,21 +407,39 @@ The project is organized into the following modules:
 
 ```
 MiniChain/
-├── src/
-│   ├── common/          # Utilities (config, logging, crypto)
-│   ├── chain/           # Blockchain data structures
-│   ├── mempool/         # Transaction mempool
-│   ├── consensus/       # Consensus algorithms
-│   ├── p2p/             # Network communication
-│   ├── node/            # Main node implementation
-│   ├── cli/             # CLI interface
-│   └── main.py          # Entry point
-├── config.yaml          # Blockchain configuration
-├── peers.txt            # Network peers (all nodes)
-├── setup.sh             # Setup script
-├── start.sh             # Start script (auto-configures)
-├── requirements.txt     # Python dependencies
-└── README.md           # This file
+├── src/                      # Backend (Python)
+│   ├── api/                  # FastAPI server
+│   ├── chain/                # Blockchain data structures
+│   ├── cli/                  # Interactive CLI
+│   ├── common/               # Config, crypto, logging
+│   ├── consensus/            # PoA and helpers
+│   ├── mempool/              # Pending transactions
+│   ├── node/                 # Node orchestration
+│   ├── p2p/                  # Networking & messages
+│   └── main.py               # Entry point
+├── frontend/                 # Vite React UI
+│   ├── src/                  # Components, pages, api client
+│   ├── Dockerfile            # Frontend container
+│   └── package.json          # Frontend deps & scripts
+├── docs/                     # Documentation
+│   ├── ARCHITECTURE.md       # Internals & wiring
+│   ├── ENDPOINT.md           # API specs
+│   ├── CURL.md               # curl examples
+│   └── PYTEST.md             # Test guide
+├── tests/                    # Pytest suite
+│   ├── test_block.py
+│   ├── test_blockchain.py
+│   ├── test_mempool.py
+│   └── test_poa.py
+├── data/                     # Persisted chain state
+├── config.yaml               # Blockchain settings
+├── peers.txt                 # Network peers (all nodes)
+├── Dockerfile.api            # API container
+├── docker-compose.yml        # Compose stack (API + UI)
+├── setup.sh                  # Python env bootstrap
+├── start.sh                  # Node launcher
+├── requirements.txt          # Python dependencies
+└── README.md                 # Project overview
 ```
 
 ## How It Works
