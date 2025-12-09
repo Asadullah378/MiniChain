@@ -68,26 +68,26 @@ services:
           - svm-11-3.cs.helsinki.fi
 
   # Backend Node 4
-  # node4:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.api
-  #   container_name: minichain-node4
-  #   hostname: svm-11-4.cs.helsinki.fi
-  #   environment:
-  #     - NODE_HOSTNAME=svm-11-4.cs.helsinki.fi
-  #     - API_PORT=8000
-  #     - CLEAN=${CLEAN:-false}
-  #   ports:
-  #     - "8003:8000"
-  #   volumes:
-  #     - node4-data:/app/data
-  #     - ./peers.txt:/app/peers.txt:ro
-  #     - ./config.yaml:/app/config.yaml:ro
-  #   networks:
-  #     minichain-network:
-  #       aliases:
-  #         - svm-11-4.cs.helsinki.fi
+  node4:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: minichain-node4
+    hostname: svm-11-4.cs.helsinki.fi
+    environment:
+      - NODE_HOSTNAME=svm-11-4.cs.helsinki.fi
+      - API_PORT=8000
+      - CLEAN=${CLEAN:-false}
+    ports:
+      - "8003:8000"
+    volumes:
+      - node4-data:/app/data
+      - ./peers.txt:/app/peers.txt:ro
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      minichain-network:
+        aliases:
+          - svm-11-4.cs.helsinki.fi
 
   # Frontend
   frontend:
@@ -102,7 +102,7 @@ services:
       - node1
       - node2
       - node3
-      # - node4
+      - node4
     ports:
       - "5173:80"
     networks:
@@ -112,7 +112,7 @@ volumes:
   node1-data:
   node2-data:
   node3-data:
-  # node4-data:
+  node4-data:
 
 networks:
   minichain-network:

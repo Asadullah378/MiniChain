@@ -6,4 +6,5 @@
 svm-11.cs.helsinki.fi:9000
 svm-11-2.cs.helsinki.fi:9000
 svm-11-3.cs.helsinki.fi:9000
+svm-11-4.cs.helsinki.fi:9000
 
