@@ -6,7 +6,6 @@ consensus:
   type: "poa_round_robin"
   block_interval: 20  # seconds between block proposals
   proposal_timeout: 10  # seconds to wait for ACKs before timeout
-  # quorum is dynamic: all active validators must ACK before commit
 
 blockchain:
   genesis_block: true
