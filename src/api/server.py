@@ -18,16 +18,7 @@ from src.chain.block import Transaction
 
 load_dotenv()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup logic
-    app.state.node = None
-    # The node dependency is injected externally
-    yield
-    # Shutdown logic
-    app.state.node = None
-
-app = FastAPI(title="MiniChain API", lifespan=lifespan)
+app = FastAPI(title="MiniChain API")
 
 debug_router = APIRouter(prefix="/debug", tags=["Debug"])
 
@@ -587,6 +578,8 @@ def start_api_server(node_instance: Node, port: int):
     
     if os.getenv("DEBUG_API", "false").lower() == "true":
         app.state.node.logger.warning("Debug API endpoints are enabled")
+        
+    app.state.node.logger.warning("TESTTEST")
     # Run uvicorn
     # We run this in the main thread usually, but app.state.node.start() blocks.
     # So we'll run uvicorn in a thread or vice versa.
