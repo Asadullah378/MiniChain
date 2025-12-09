@@ -172,10 +172,12 @@ echo ""
 
 # Determine python executable
 PYTHON="python3"
-if [ -d ".venv" ]; then
-    PYTHON=".venv/bin/python3"
-elif [ -d "venv" ]; then
-    PYTHON="venv/bin/python3"
+if [ ! -f "/.dockerenv" ]; then
+    if [ -d ".venv" ]; then
+        PYTHON=".venv/bin/python3"
+    elif [ -d "venv" ]; then
+        PYTHON="venv/bin/python3"
+    fi
 fi
 
 
