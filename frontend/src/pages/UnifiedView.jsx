@@ -581,7 +581,8 @@ const UnifiedView = () => {
                 </button>
             </div>
 
-            <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0 overflow-hidden">
+            {/* <div className={`flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0 overflow-hidden`}> */}
+            <div className={`flex-1 grid grid-cols-1 ${nodes.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4 min-h-0 overflow-hidden`}>
                 {nodes.map((node, index) => (
                     <NodePanel key={node.id} node={node} index={index} />
                 ))}
